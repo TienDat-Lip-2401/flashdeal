@@ -1,0 +1,181 @@
+services:
+  # ==========================================
+  # 1. POSTGRESQL 16 (Chua 4 Database rieng biet)
+  # ==========================================
+  flashdeal-db:
+    image: postgres:16-alpine
+    container_name: flashdeal-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: flashdeal_user
+      POSTGRES_PASSWORD: flashdeal_password
+      POSTGRES_DB: flashdeal_db
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql
+    networks:
+      - flashdeal-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U flashdeal_user -d flashdeal_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================
+  # 2. REDIS 7 (In-Memory Cache & Search ZSET)
+  # ==========================================
+  flashdeal-redis:
+    image: redis:7-alpine
+    container_name: flashdeal-redis
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    networks:
+      - flashdeal-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================
+  # 3. APACHE KAFKA 3.7 (Che do KRaft)
+  # ==========================================
+  flashdeal-kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: flashdeal-kafka
+    restart: unless-stopped
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://flashdeal-kafka:29092,PLAINTEXT_HOST://localhost:9092'
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@flashdeal-kafka:29093'
+      KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093,PLAINTEXT_HOST://0.0.0.0:9092'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
+      CLUSTER_ID: 'MkU3OEVBNTcwNTJENDM2Qk'
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - flashdeal-network
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 9092 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================
+  # 4. KAFKA UI (Giao dien quan ly Topics & Partitions)
+  # ==========================================
+  flashdeal-kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: flashdeal-kafka-ui
+    restart: unless-stopped
+    ports:
+      - "8085:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: flashdeal-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: flashdeal-kafka:29092
+    depends_on:
+      flashdeal-kafka:
+        condition: service_healthy
+    networks:
+      - flashdeal-network
+
+  # ==========================================
+  # 5. PRODUCT & SEARCH SERVICE (:8082)
+  # ==========================================
+  product-service:
+    build:
+      context: ./product-service
+      dockerfile: Dockerfile
+    container_name: flashdeal-product-service
+    restart: unless-stopped
+    ports:
+      - "8082:8082"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://flashdeal-db:5432/product_db
+      SPRING_DATASOURCE_USERNAME: flashdeal_user
+      SPRING_DATASOURCE_PASSWORD: flashdeal_password
+      SPRING_DATA_REDIS_HOST: flashdeal-redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: flashdeal-kafka:29092
+    depends_on:
+      flashdeal-db:
+        condition: service_healthy
+      flashdeal-redis:
+        condition: service_healthy
+      flashdeal-kafka:
+        condition: service_healthy
+    networks:
+      - flashdeal-network
+
+  # ==========================================
+  # 6. AUTH & USER SERVICE (:8081)
+  # ==========================================
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+    container_name: flashdeal-auth-service
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://flashdeal-db:5432/auth_db
+      SPRING_DATASOURCE_USERNAME: flashdeal_user
+      SPRING_DATASOURCE_PASSWORD: flashdeal_password
+      SPRING_DATA_REDIS_HOST: flashdeal-redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: flashdeal-kafka:29092
+    depends_on:
+      flashdeal-db:
+        condition: service_healthy
+      flashdeal-redis:
+        condition: service_healthy
+      flashdeal-kafka:
+        condition: service_healthy
+    networks:
+      - flashdeal-network
+
+  # ==========================================
+  # 7. API GATEWAY (:8080 - Cong duy nhat cho Frontend)
+  # ==========================================
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    container_name: flashdeal-gateway
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      PRODUCT_SERVICE_URL: http://product-service:8082
+      AUTH_SERVICE_URL: http://auth-service:8081
+    depends_on:
+      - product-service
+      - auth-service
+    networks:
+      - flashdeal-network
+
+networks:
+  flashdeal-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  kafka_data:

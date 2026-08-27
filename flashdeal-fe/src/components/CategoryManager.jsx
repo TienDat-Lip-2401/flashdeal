@@ -7,6 +7,8 @@ export default function CategoryManager({ setLastResponse, showToast }) {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [autoReload, setAutoReload] = useState(false); // Mặc định tắt để người dùng kiểm tra Redis rỗng sau khi xóa
 
   const [formData, setFormData] = useState({
     name: '',
@@ -21,6 +23,7 @@ export default function CategoryManager({ setLastResponse, showToast }) {
       const res = await categoryApi.getAll();
       setLastResponse(res);
       setCategories(res.data || []);
+      showToast('Đã tải danh sách từ API Gateway (Dữ liệu đã được nạp vào Redis Cache categories::all)', 'info');
     } catch (err) {
       setLastResponse(err);
       showToast(err.message || 'Lỗi khi tải danh mục', 'error');
@@ -50,15 +53,24 @@ export default function CategoryManager({ setLastResponse, showToast }) {
       let res;
       if (editingId) {
         res = await categoryApi.update(editingId, formData);
-        showToast('Cập nhật danh mục thành công!', 'success');
+        showToast('Cập nhật danh mục thành công! Cache Redis đã được làm mới.', 'success');
       } else {
         res = await categoryApi.create(formData);
-        showToast('Thêm mới danh mục thành công!', 'success');
+        showToast('Thêm mới danh mục thành công! Cache Redis đã được làm mới.', 'success');
       }
       setLastResponse(res);
       setFormData({ name: '', slug: '', parentId: null, displayOrder: 0 });
       setEditingId(null);
-      fetchCategories();
+
+      if (autoReload) {
+        fetchCategories();
+      } else if (res.data) {
+        if (editingId) {
+          setCategories(prev => prev.map(c => c.id === editingId ? res.data : c));
+        } else {
+          setCategories(prev => [...prev, res.data]);
+        }
+      }
     } catch (err) {
       setLastResponse(err);
       showToast(`Lỗi [Code ${err.code || 500}]: ${err.message}`, 'error');
@@ -75,16 +87,26 @@ export default function CategoryManager({ setLastResponse, showToast }) {
     });
   };
 
-  const handleDelete = async (id, name) => {
-    if (!window.confirm(`Bạn có chắc muốn xóa danh mục "${name}" (ID: ${id})?`)) return;
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
     try {
-      const res = await categoryApi.delete(id);
+      const res = await categoryApi.delete(deleteTarget.id);
       setLastResponse(res);
-      showToast('Xóa danh mục thành công!', 'success');
-      fetchCategories();
+      showToast(`Đã xóa danh mục "${deleteTarget.name}". Cache Redis (categories & products) đã bị xóa sạch! Bạn có thể kiểm tra redis-cli KEYS * ngay!`, 'success');
+      
+      const deletedId = deleteTarget.id;
+      setDeleteTarget(null);
+
+      if (autoReload) {
+        fetchCategories();
+      } else {
+        // Cập nhật giao diện cục bộ mà KHÔNG gửi GET request để bạn kiểm tra Redis rỗng
+        setCategories(prev => prev.filter(c => c.id !== deletedId));
+      }
     } catch (err) {
       setLastResponse(err);
       showToast(`Lỗi [Code ${err.code || 500}]: ${err.message}`, 'error');
+      setDeleteTarget(null);
     }
   };
 
@@ -200,21 +222,40 @@ export default function CategoryManager({ setLastResponse, showToast }) {
       {/* Table List Section */}
       <div className="lg:col-span-7">
         <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-xl">
-          <div className="flex items-center justify-between mb-5">
-            <h3 className="font-bold text-slate-100 flex items-center gap-2">
-              <span>Danh Sách Danh Mục</span>
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-700 text-slate-300 font-mono">
-                {categories.length} mục
-              </span>
-            </h3>
-            <button
-              onClick={fetchCategories}
-              disabled={loading}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-medium transition disabled:opacity-50"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-              Làm mới
-            </button>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 border-b border-slate-700 pb-4">
+            <div>
+              <h3 className="font-bold text-slate-100 flex items-center gap-2">
+                <span>Danh Sách Danh Mục</span>
+                <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-700 text-slate-300 font-mono">
+                  {categories.length} mục
+                </span>
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">
+                Quản lý các danh mục và kiểm tra tính năng Cache Redis
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-700 select-none">
+                <input
+                  type="checkbox"
+                  checked={autoReload}
+                  onChange={(e) => setAutoReload(e.target.checked)}
+                  className="rounded text-indigo-600 focus:ring-0 bg-slate-800 border-slate-600"
+                />
+                <span>Tự nạp lại sau Xóa</span>
+              </label>
+
+              <button
+                onClick={fetchCategories}
+                disabled={loading}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white text-xs font-semibold shadow-md shadow-indigo-600/30 transition disabled:opacity-50"
+                title="Gửi GET /api/categories để nạp lại dữ liệu vào Redis Cache"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                <span>Tải Lại & Nạp Cache</span>
+              </button>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
@@ -259,7 +300,7 @@ export default function CategoryManager({ setLastResponse, showToast }) {
                             <Edit3 className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => handleDelete(cat.id, cat.name)}
+                            onClick={() => setDeleteTarget({ id: cat.id, name: cat.name })}
                             className="p-1.5 rounded-lg bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 border border-rose-500/20 transition"
                             title="Xóa danh mục"
                           >
@@ -275,6 +316,46 @@ export default function CategoryManager({ setLastResponse, showToast }) {
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3 text-rose-400 border-b border-slate-800 pb-3">
+              <AlertCircle className="w-6 h-6 shrink-0" />
+              <h3 className="font-bold text-slate-100 text-base">Xác Nhận Xóa Danh Mục</h3>
+            </div>
+
+            <p className="text-sm text-slate-300 leading-relaxed">
+              Bạn có chắc chắn muốn xóa danh mục <span className="font-bold text-white font-mono">"{deleteTarget.name}"</span> không?
+            </p>
+
+            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-300 flex items-start gap-2">
+              <span className="font-bold shrink-0">Lưu ý:</span>
+              <span>
+                Toàn bộ sản phẩm thuộc danh mục này sẽ <b>tự động được chuyển sang danh mục "Chưa phân loại"</b> để bảo toàn dữ liệu sản phẩm.
+              </span>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium rounded-xl text-sm transition"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-semibold rounded-xl text-sm transition shadow-lg shadow-rose-600/30 active:scale-95"
+              >
+                Xác nhận xóa
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

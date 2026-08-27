@@ -1,11 +1,12 @@
 import React from 'react';
-import { Layers, Package, ShoppingBag, Terminal, Sparkles, Activity } from 'lucide-react';
+import { Layers, Package, ShoppingBag, Terminal, Sparkles, Activity, ShieldCheck } from 'lucide-react';
 
-export default function Navbar({ activeTab, setActiveTab, onOpenConsole, lastResponse }) {
+export default function Navbar({ activeTab, setActiveTab, onOpenConsole, lastResponse, currentUser }) {
   const tabs = [
     { id: 'search', label: 'Sàn TMĐT & Bộ Lọc', icon: ShoppingBag },
     { id: 'products', label: 'Quản Lý Sản Phẩm', icon: Package },
     { id: 'categories', label: 'Quản Lý Danh Mục', icon: Layers },
+    { id: 'auth', label: 'Xác Thực & Auth API', icon: ShieldCheck },
   ];
 
   return (

@@ -9,6 +9,7 @@ export default function ProductManager({ setLastResponse, showToast }) {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [autoReload, setAutoReload] = useState(false); // Mặc định tắt để người dùng kiểm tra Redis rỗng sau khi xóa
 
   const [formData, setFormData] = useState({
     name: '',
@@ -31,6 +32,7 @@ export default function ProductManager({ setLastResponse, showToast }) {
       setLastResponse(prodRes);
       setProducts(prodRes.data || []);
       setCategories(catRes.data || []);
+      showToast('Đã gửi GET /api/products và nạp lại Cache Redis (product_filters)', 'info');
     } catch (err) {
       setLastResponse(err);
       showToast(err.message || 'Lỗi tải dữ liệu', 'error');
@@ -65,10 +67,10 @@ export default function ProductManager({ setLastResponse, showToast }) {
       let res;
       if (editingId) {
         res = await productApi.update(editingId, formData);
-        showToast('Cập nhật sản phẩm thành công!', 'success');
+        showToast('Cập nhật sản phẩm thành công! Cache Redis đã được làm mới.', 'success');
       } else {
         res = await productApi.create(formData);
-        showToast('Thêm mới sản phẩm thành công!', 'success');
+        showToast('Thêm mới sản phẩm thành công! Cache Redis đã được làm mới.', 'success');
       }
       setLastResponse(res);
       setFormData({
@@ -82,7 +84,16 @@ export default function ProductManager({ setLastResponse, showToast }) {
         status: 'ACTIVE',
       });
       setEditingId(null);
-      fetchData();
+
+      if (autoReload) {
+        fetchData();
+      } else if (res.data) {
+        if (editingId) {
+          setProducts(prev => prev.map(p => p.id === editingId ? res.data : p));
+        } else {
+          setProducts(prev => [res.data, ...prev]);
+        }
+      }
     } catch (err) {
       setLastResponse(err);
       showToast(`Lỗi [Code ${err.code || 500}]: ${err.message}`, 'error');
@@ -108,8 +119,14 @@ export default function ProductManager({ setLastResponse, showToast }) {
     try {
       const res = await productApi.delete(id);
       setLastResponse(res);
-      showToast('Xóa sản phẩm thành công!', 'success');
-      fetchData();
+      showToast(`Đã xóa sản phẩm "${name}". Cache Redis (products & product_filters) đã bị xóa sạch! Bạn có thể kiểm tra redis-cli KEYS * ngay!`, 'success');
+
+      if (autoReload) {
+        fetchData();
+      } else {
+        // Cập nhật giao diện cục bộ mà KHÔNG gửi GET request để bạn kiểm tra Redis rỗng
+        setProducts(prev => prev.filter(p => p.id !== id));
+      }
     } catch (err) {
       setLastResponse(err);
       showToast(`Lỗi [Code ${err.code || 500}]: ${err.message}`, 'error');
@@ -282,21 +299,40 @@ export default function ProductManager({ setLastResponse, showToast }) {
       {/* Table List Section */}
       <div className="lg:col-span-7">
         <div className="bg-slate-800 border border-slate-700 rounded-2xl p-6 shadow-xl">
-          <div className="flex items-center justify-between mb-5">
-            <h3 className="font-bold text-slate-100 flex items-center gap-2">
-              <span>Danh Sách Sản Phẩm</span>
-              <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-700 text-slate-300 font-mono">
-                {products.length} sản phẩm
-              </span>
-            </h3>
-            <button
-              onClick={fetchData}
-              disabled={loading}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-medium transition disabled:opacity-50"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-              Làm mới
-            </button>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 border-b border-slate-700 pb-4">
+            <div>
+              <h3 className="font-bold text-slate-100 flex items-center gap-2">
+                <span>Danh Sách Sản Phẩm</span>
+                <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-700 text-slate-300 font-mono">
+                  {products.length} sản phẩm
+                </span>
+              </h3>
+              <p className="text-xs text-slate-400 mt-1">
+                Quản lý sản phẩm và kiểm tra xóa Cache Redis (products & product_filters)
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer bg-slate-900 px-3 py-1.5 rounded-lg border border-slate-700 select-none">
+                <input
+                  type="checkbox"
+                  checked={autoReload}
+                  onChange={(e) => setAutoReload(e.target.checked)}
+                  className="rounded text-amber-500 focus:ring-0 bg-slate-800 border-slate-600"
+                />
+                <span>Tự nạp lại sau Xóa</span>
+              </label>
+
+              <button
+                onClick={fetchData}
+                disabled={loading}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 text-xs font-bold shadow-md shadow-amber-500/30 transition disabled:opacity-50"
+                title="Gửi GET /api/products để nạp lại dữ liệu vào Redis Cache"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                <span>Tải Lại & Nạp Cache</span>
+              </button>
+            </div>
           </div>
 
           <div className="overflow-x-auto">

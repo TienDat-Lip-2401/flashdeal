@@ -3,6 +3,7 @@ import Navbar from './components/Navbar';
 import CategoryManager from './components/CategoryManager';
 import ProductManager from './components/ProductManager';
 import ProductCatalogSearch from './components/ProductCatalogSearch';
+import AuthManager from './components/AuthManager';
 import ApiResponseModal from './components/ApiResponseModal';
 import { categoryApi } from './api/categoryApi';
 import { productApi } from './api/productApi';
@@ -10,7 +11,8 @@ import { getRandomCategory, getRandomProduct } from './utils/mockGenerator';
 import { Sparkles, Database, CheckCircle, AlertCircle, Info, X } from 'lucide-react';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('search');
+  const [activeTab, setActiveTab] = useState('auth');
+  const [currentUser, setCurrentUser] = useState(null);
   const [lastResponse, setLastResponse] = useState(null);
   const [isConsoleOpen, setIsConsoleOpen] = useState(false);
   const [toast, setToast] = useState(null);
@@ -110,6 +112,14 @@ export default function App() {
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-8">
+        {activeTab === 'auth' && (
+          <AuthManager
+            setLastResponse={setLastResponse}
+            showToast={showToast}
+            currentUser={currentUser}
+            setCurrentUser={setCurrentUser}
+          />
+        )}
         {activeTab === 'search' && (
           <ProductCatalogSearch setLastResponse={setLastResponse} showToast={showToast} />
         )}
