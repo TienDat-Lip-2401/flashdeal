@@ -60,6 +60,14 @@ const SAMPLE_PRODUCTS = [
   },
 ];
 
+const CAMPAIGN_TITLES = [
+  'Đại Tiệc Flash Sale Siêu Bão Công Nghệ',
+  'Giờ Vàng Săn Siêu Phẩm Công Nghệ Giảm 50%',
+  'Flash Sale Đêm Khuya - Giá Sốc Đỉnh Điểm',
+  'Mega Flash Sale Cuối Tuần - Giới Hạn 100 Suất',
+  'Săn Deal Thần Tốc - Xả Kho Không Lợi Nhuận',
+];
+
 export const getRandomCategory = () => {
   const randomSuffix = Math.floor(Math.random() * 1000);
   const template = SAMPLE_CATEGORIES[Math.floor(Math.random() * SAMPLE_CATEGORIES.length)];
@@ -86,5 +94,41 @@ export const getRandomProduct = (categoryId = null) => {
     description: template.description,
     imageUrl: template.imageUrl,
     status: 'ACTIVE',
+  };
+};
+
+export const getRandomRegisterUser = () => {
+  const randomId = Math.floor(Math.random() * 90000) + 10000;
+  const names = ['Nguyễn Văn Nam', 'Trần Thị Mai', 'Lê Hoàng Long', 'Phạm Minh Đức', 'Hoàng Thu Trang', 'Đỗ Quang Hải'];
+  const cities = ['Hà Nội', 'TP. Hồ Chí Minh', 'Đà Nẵng', 'Hải Phòng', 'Cần Thơ'];
+  const randomName = names[Math.floor(Math.random() * names.length)];
+  const randomCity = cities[Math.floor(Math.random() * cities.length)];
+
+  return {
+    email: `customer${randomId}@flashdeal.vn`,
+    password: 'Password@123',
+    fullName: `${randomName} (${randomId})`,
+    phone: `09${Math.floor(Math.random() * 90000000 + 10000000)}`,
+    address: `Số ${Math.floor(Math.random() * 200) + 1} Đường Giải Phóng, ${randomCity}`,
+  };
+};
+
+export const getRandomCampaign = () => {
+  const now = new Date();
+  const startTime = new Date(now.getTime() - 24 * 60 * 60 * 1000); // 24 hours ago (guaranteed active)
+  const endTime = new Date(now.getTime() + 48 * 60 * 60 * 1000); // 48 hours later
+
+  const formatLocalISO = (d) => {
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  };
+
+  const title = CAMPAIGN_TITLES[Math.floor(Math.random() * CAMPAIGN_TITLES.length)];
+  const randomSuffix = Math.floor(Math.random() * 900) + 100;
+
+  return {
+    title: `${title} #${randomSuffix}`,
+    startTime: formatLocalISO(startTime),
+    endTime: formatLocalISO(endTime),
   };
 };

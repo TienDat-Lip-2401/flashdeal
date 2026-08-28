@@ -1,0 +1,59 @@
+server:
+  port: 8086
+
+spring:
+  application:
+    name: notification-service
+
+  # Cấu hình kết nối Apache Kafka
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    topic:
+      order-created: flashsale.order.created
+    consumer:
+      group-id: notification-service-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "flashdeal_api.order.model.event,flashdeal_api.notification.model.event,*"
+        spring.json.use.type.headers: false
+        spring.json.value.default.type: flashdeal_api.notification.model.event.OrderCreatedEvent
+
+  # Cấu hình Spring Mail SMTP với tài khoản Gmail của bạn
+  mail:
+    host: ${SPRING_MAIL_HOST:smtp.gmail.com}
+    port: ${SPRING_MAIL_PORT:587}
+    username: ${SPRING_MAIL_USERNAME:datnguyentien2401@gmail.com}
+    password: ${SPRING_MAIL_PASSWORD:mtyibtjpvfsewxch}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+          connectiontimeout: 10000
+          timeout: 10000
+          writetimeout: 10000
+
+  # Cấu hình Thymeleaf Engine cho Email HTML Template
+  thymeleaf:
+    prefix: classpath:/templates/
+    suffix: .html
+    mode: HTML
+    encoding: UTF-8
+    cache: false
+
+# Swagger OpenAPI Documentation
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+logging:
+  level:
+    root: INFO
+    flashdeal_api.notification: DEBUG
+    org.springframework.kafka: INFO

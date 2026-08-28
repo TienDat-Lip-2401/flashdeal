@@ -8,10 +8,10 @@ const axiosClient = axios.create({
   timeout: 10000,
 });
 
-// Request interceptor: Attach JWT token if available
+// Request interceptor: Attach JWT token if available (Supports both access_token and accessToken keys)
 axiosClient.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('accessToken');
+    const token = localStorage.getItem('access_token') || localStorage.getItem('accessToken');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -19,6 +19,7 @@ axiosClient.interceptors.request.use(
   },
   (error) => Promise.reject(error)
 );
+
 axiosClient.interceptors.response.use(
   (response) => {
     return response.data;

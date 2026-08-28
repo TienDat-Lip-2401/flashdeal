@@ -1,31 +1,43 @@
 import React, { useState, useEffect } from 'react';
 import { authApi } from '../api/authApi';
+import { getRandomRegisterUser } from '../utils/mockGenerator';
+import Breadcrumb from './Breadcrumb';
 import {
-  UserPlus,
-  LogIn,
-  LogOut,
-  RefreshCw,
+  ShieldCheck,
   User,
-  Shield,
-  Key,
   Mail,
+  Lock,
   Phone,
   MapPin,
-  Clock,
-  Sparkles,
-  Send,
+  LogIn,
+  UserPlus,
+  RefreshCw,
+  LogOut,
+  Dices,
+  KeyRound,
+  Server,
+  ExternalLink,
+  Cpu,
   CheckCircle2,
-  AlertTriangle,
+  AlertCircle,
+  Crown,
+  Sparkles
 } from 'lucide-react';
 
-export default function AuthManager({ setLastResponse, showToast, currentUser, setCurrentUser }) {
+export default function AuthManager({ setLastResponse, showToast, activeUser, setActiveUser }) {
   const [authMode, setAuthMode] = useState('login'); // 'login' | 'register'
   const [loading, setLoading] = useState(false);
-  const [profile, setProfile] = useState(null);
+  const [tokens, setTokens] = useState({
+    accessToken: localStorage.getItem('access_token') || '',
+    refreshToken: localStorage.getItem('refresh_token') || '',
+  });
 
-  // Form states
-  const [loginData, setLoginData] = useState({ email: '', password: '' });
-  const [registerData, setRegisterData] = useState({
+  const [loginForm, setLoginForm] = useState({
+    email: '',
+    password: '',
+  });
+
+  const [registerForm, setRegisterForm] = useState({
     email: '',
     password: '',
     fullName: '',
@@ -33,59 +45,123 @@ export default function AuthManager({ setLastResponse, showToast, currentUser, s
     address: '',
   });
 
-  const [tokenInfo, setTokenInfo] = useState({
-    accessToken: localStorage.getItem('accessToken') || '',
-    refreshToken: localStorage.getItem('refreshToken') || '',
-  });
-
   const fetchProfile = async () => {
-    const token = localStorage.getItem('accessToken');
-    if (!token) {
-      setProfile(null);
-      setCurrentUser?.(null);
-      return;
-    }
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+    setLoading(true);
     try {
       const res = await authApi.getProfile();
       setLastResponse(res);
-      setProfile(res.data);
-      setCurrentUser?.(res.data);
+      setActiveUser(res.data);
     } catch (err) {
       setLastResponse(err);
-      // Neu token het han, xoa khoi storage
-      if (err.status === 401 || err.code === 1008 || err.code === 1009) {
-        handleClearAuth();
-      }
+      setActiveUser(null);
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (tokenInfo.accessToken) {
+    if (tokens.accessToken) {
       fetchProfile();
     }
-  }, [tokenInfo.accessToken]);
+  }, [tokens.accessToken]);
 
-  const handleClearAuth = () => {
-    localStorage.removeItem('accessToken');
-    localStorage.removeItem('refreshToken');
-    setTokenInfo({ accessToken: '', refreshToken: '' });
-    setProfile(null);
-    setCurrentUser?.(null);
+  const handleRandomRegisterData = () => {
+    const random = getRandomRegisterUser();
+    setRegisterForm(random);
+    showToast('Đã tạo ngẫu nhiên thông tin tài khoản đăng ký!', 'info');
   };
 
-  const handleRegister = async (e) => {
+  // Quick 1-Click Login Helper
+  const handleQuickLogin = async (email, password, roleLabel) => {
+    setLoading(true);
+    try {
+      const res = await authApi.login({ email, password });
+      setLastResponse(res);
+      const data = res.data;
+      localStorage.setItem('access_token', data.accessToken);
+      localStorage.setItem('refresh_token', data.refreshToken);
+      setTokens({
+        accessToken: data.accessToken,
+        refreshToken: data.refreshToken,
+      });
+      setActiveUser(data.user);
+      showToast(`Đăng nhập thành công với tài khoản ${roleLabel} [${data.user?.role}]!`, 'success');
+    } catch (err) {
+      // Neu chua co tai khoan thi tu dong dang ky luon roi dang nhap
+      if (err.code === 2002 || err.code === 2001) {
+        try {
+          await authApi.register({
+            email,
+            password,
+            fullName: email === 'admin@flashdeal.vn' ? 'Tổng Quản Trị Hệ Thống' : 'Khách Hàng Mẫu',
+            phone: '0988668899',
+            address: 'Hà Nội',
+          });
+          const loginRes = await authApi.login({ email, password });
+          setLastResponse(loginRes);
+          const data = loginRes.data;
+          localStorage.setItem('access_token', data.accessToken);
+          localStorage.setItem('refresh_token', data.refreshToken);
+          setTokens({ accessToken: data.accessToken, refreshToken: data.refreshToken });
+          setActiveUser(data.user);
+          showToast(`Đã tự động khởi tạo và đăng nhập tài khoản ${roleLabel}!`, 'success');
+        } catch (regErr) {
+          setLastResponse(regErr);
+          showToast(`Lỗi: ${regErr.message}`, 'error');
+        }
+      } else {
+        setLastResponse(err);
+        showToast(`Lỗi đăng nhập: ${err.message}`, 'error');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleLogin = async (e) => {
     e.preventDefault();
-    if (!registerData.email || !registerData.password || !registerData.fullName) {
-      showToast('Vui lòng điền đầy đủ Email, Mật khẩu và Họ tên!', 'error');
+    if (!loginForm.email || !loginForm.password) {
+      showToast('Vui lòng nhập email và mật khẩu', 'error');
       return;
     }
     setLoading(true);
     try {
-      const res = await authApi.register(registerData);
+      const res = await authApi.login(loginForm);
       setLastResponse(res);
-      showToast('Đăng ký tài khoản thành công! Kafka event user.registered.event đã được phát!', 'success');
-      // Chuyển sang tab đăng nhập với email vừa đăng ký
-      setLoginData({ email: registerData.email, password: registerData.password });
+      const data = res.data;
+      localStorage.setItem('access_token', data.accessToken);
+      localStorage.setItem('refresh_token', data.refreshToken);
+      setTokens({
+        accessToken: data.accessToken,
+        refreshToken: data.refreshToken,
+      });
+      setActiveUser(data.user);
+      showToast(`Đăng nhập thành công! Chào mừng ${data.user?.fullName || data.user?.email}`, 'success');
+    } catch (err) {
+      setLastResponse(err);
+      showToast(`Lỗi [Code ${err.code || 500}]: ${err.message}`, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    if (!registerForm.email || !registerForm.password || !registerForm.fullName) {
+      showToast('Vui lòng điền các thông tin bắt buộc (*)', 'error');
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await authApi.register(registerForm);
+      setLastResponse(res);
+      showToast(`Đăng ký thành công! Sự kiện [user.registered.event] đã được bắn vào Kafka.`, 'success');
+      setLoginForm({
+        email: registerForm.email,
+        password: registerForm.password,
+      });
       setAuthMode('login');
     } catch (err) {
       setLastResponse(err);
@@ -95,401 +171,353 @@ export default function AuthManager({ setLastResponse, showToast, currentUser, s
     }
   };
 
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    if (!loginData.email || !loginData.password) {
-      showToast('Vui lòng nhập Email và Mật khẩu!', 'error');
-      return;
-    }
-    setLoading(true);
-    try {
-      const res = await authApi.login(loginData);
-      setLastResponse(res);
-      const authData = res.data;
-      if (authData?.accessToken) {
-        localStorage.setItem('accessToken', authData.accessToken);
-        localStorage.setItem('refreshToken', authData.refreshToken);
-        setTokenInfo({
-          accessToken: authData.accessToken,
-          refreshToken: authData.refreshToken,
-        });
-        showToast(`Đăng nhập thành công! Chào mừng ${authData.user?.fullName || ''}`, 'success');
-        fetchProfile();
-      }
-    } catch (err) {
-      setLastResponse(err);
-      showToast(`Lỗi [Code ${err.code || 500}]: ${err.message}`, 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleRefreshToken = async () => {
-    const rfToken = localStorage.getItem('refreshToken');
-    if (!rfToken) {
+    const refreshToken = localStorage.getItem('refresh_token');
+    if (!refreshToken) {
       showToast('Không tìm thấy Refresh Token trong LocalStorage!', 'error');
       return;
     }
     setLoading(true);
     try {
-      const res = await authApi.refreshToken({ refreshToken: rfToken });
+      const res = await authApi.refreshToken(refreshToken);
       setLastResponse(res);
-      const authData = res.data;
-      if (authData?.accessToken) {
-        localStorage.setItem('accessToken', authData.accessToken);
-        localStorage.setItem('refreshToken', authData.refreshToken);
-        setTokenInfo({
-          accessToken: authData.accessToken,
-          refreshToken: authData.refreshToken,
-        });
-        showToast('Đã làm mới (Rotate) Access Token & Refresh Token thành công!', 'success');
-      }
+      const data = res.data;
+      localStorage.setItem('access_token', data.accessToken);
+      localStorage.setItem('refresh_token', data.refreshToken);
+      setTokens({
+        accessToken: data.accessToken,
+        refreshToken: data.refreshToken,
+      });
+      showToast('Xoay vòng Token (Rotation) thành công! Token cũ đã bị hủy và cấp cặp Token mới.', 'success');
+      fetchProfile();
     } catch (err) {
       setLastResponse(err);
-      showToast(`Lỗi làm mới Token: ${err.message}`, 'error');
+      showToast(`Lỗi làm mới token: ${err.message}`, 'error');
     } finally {
       setLoading(false);
     }
   };
 
   const handleLogout = async () => {
-    setLoading(true);
+    const accessToken = localStorage.getItem('access_token');
     try {
-      const res = await authApi.logout();
+      const res = await authApi.logout(accessToken);
       setLastResponse(res);
-      handleClearAuth();
-      showToast('Đăng xuất thành công! Token đã được đưa vào Redis Blacklist.', 'success');
+      showToast('Đăng xuất thành công! Access Token đã được đưa vào Redis Blacklist.', 'success');
     } catch (err) {
       setLastResponse(err);
-      handleClearAuth();
-      showToast('Đã xóa phiên đăng nhập cục bộ!', 'info');
     } finally {
-      setLoading(false);
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      setTokens({ accessToken: '', refreshToken: '' });
+      setActiveUser(null);
     }
   };
 
-  const handleQuickMockCustomer = () => {
-    const rand = Math.floor(Math.random() * 10000);
-    setRegisterData({
-      email: `customer_${rand}@gmail.com`,
-      password: 'Password123!',
-      fullName: `Nguyễn Văn Sale ${rand}`,
-      phone: '0988' + Math.floor(100000 + Math.random() * 900000),
-      address: 'Số 123 Đường Cầu Giấy, Hà Nội',
-    });
-    showToast('Đã tạo dữ liệu mẫu đăng ký!', 'info');
-  };
+  const breadcrumbItems = [
+    { label: 'Trang chủ' },
+    { label: 'Tài Khoản & Bảo Mật JWT' }
+  ];
 
   return (
-    <div className="space-y-8">
-      {/* Header Info */}
-      <div className="bg-gradient-to-r from-slate-800 via-indigo-950/50 to-slate-800 border border-slate-700 rounded-3xl p-6 sm:p-8 shadow-2xl">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-indigo-500/20 text-indigo-400 rounded-2xl border border-indigo-500/30">
-                <Shield className="w-7 h-7" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-black text-white tracking-tight">
-                  Auth & Identity Service (:8081)
-                </h1>
-                <p className="text-sm text-slate-400">
-                  Xác thực JWT Stateless • Redis Refresh Token & Blacklist • Kafka Event Bus
-                </p>
-              </div>
-            </div>
-          </div>
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <Breadcrumb items={breadcrumbItems} />
 
-          {/* Quick status pill */}
-          <div className="flex items-center gap-3 bg-slate-900/80 px-4 py-2 rounded-2xl border border-slate-700">
-            <span
-              className={`w-3 h-3 rounded-full ${
-                profile ? 'bg-emerald-400 shadow-lg shadow-emerald-400/50' : 'bg-amber-400'
-              }`}
-            />
-            <span className="text-xs font-mono text-slate-300">
-              Trạng thái: {profile ? `Đã đăng nhập (${profile.role})` : 'Khách vãng lai (Guest)'}
-            </span>
+      {/* Hero Header */}
+      <div className="rounded-2xl bg-[#0B192C] text-white p-6 sm:p-8 mb-8 border border-slate-800 shadow-md">
+        <div className="max-w-3xl">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-900/80 text-blue-300 text-xs font-semibold uppercase tracking-wider mb-3 border border-blue-700/50">
+            <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
+            Bảo Mật Xác Thực & Token Rotation
           </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+            Authentication Service & Redis Blacklist Hub
+          </h1>
+          <p className="text-slate-300 text-sm mt-2 leading-relaxed">
+            Hệ thống xác thực <strong>Stateless JWT (HMAC-SHA256)</strong>, cơ chế xoay vòng Refresh Token (Token Rotation),
+            vô hiệu hóa tức thì với <strong>Redis Blacklist</strong>, và phân quyền người dùng <strong>ROLE_ADMIN / ROLE_CUSTOMER</strong>.
+          </p>
+        </div>
+      </div>
+
+      {/* Quick 1-Click Role Switcher Bar */}
+      <div className="mb-8 p-4 rounded-xl bg-white border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-center gap-2 text-xs text-slate-700">
+          <Sparkles className="w-4 h-4 text-blue-700" />
+          <span className="font-bold">1-Click Test Phân Quyền Nhanh:</span>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => handleQuickLogin('customer@flashdeal.vn', 'Password@123', 'Khách Hàng')}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200 text-xs font-bold transition shadow-xs disabled:opacity-50"
+          >
+            <User className="w-3.5 h-3.5" />
+            <span>👤 Đăng Nhập Khách Hàng (ROLE_CUSTOMER)</span>
+          </button>
+
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => handleQuickLogin('admin@flashdeal.vn', 'Admin@123', 'Quản Trị Viên')}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-bold transition shadow-xs disabled:opacity-50"
+          >
+            <Crown className="w-3.5 h-3.5 text-amber-600" />
+            <span>👑 Đăng Nhập Quản Trị Viên (ROLE_ADMIN)</span>
+          </button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Left Column: Login / Register Form */}
-        <div className="lg:col-span-6 space-y-6">
-          <div className="bg-slate-800 border border-slate-700 rounded-3xl p-6 shadow-xl">
-            {/* Tab switch */}
-            <div className="flex items-center p-1 bg-slate-900 rounded-2xl mb-6">
+        {/* Left Column: Login & Register Card */}
+        <div className="lg:col-span-6">
+          <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+            {/* Toggle Tabs */}
+            <div className="flex border-b border-slate-100 pb-3 mb-6">
               <button
                 type="button"
                 onClick={() => setAuthMode('login')}
-                className={`flex-1 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition flex items-center justify-center gap-2 ${
+                className={`flex-1 py-2 text-center text-xs font-bold border-b-2 transition ${
                   authMode === 'login'
-                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
-                    : 'text-slate-400 hover:text-slate-200'
+                    ? 'border-blue-900 text-blue-900'
+                    : 'border-transparent text-slate-500 hover:text-slate-900'
                 }`}
               >
-                <LogIn className="w-4 h-4" />
-                Đăng Nhập
+                Đăng Nhập (Login)
               </button>
               <button
                 type="button"
                 onClick={() => setAuthMode('register')}
-                className={`flex-1 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition flex items-center justify-center gap-2 ${
+                className={`flex-1 py-2 text-center text-xs font-bold border-b-2 transition ${
                   authMode === 'register'
-                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30'
-                    : 'text-slate-400 hover:text-slate-200'
+                    ? 'border-blue-900 text-blue-900'
+                    : 'border-transparent text-slate-500 hover:text-slate-900'
                 }`}
               >
-                <UserPlus className="w-4 h-4" />
-                Đăng Ký Tài Khoản
+                Đăng Ký & Bắn Kafka Event
               </button>
             </div>
 
-            {/* Login Form */}
             {authMode === 'login' ? (
-              <form onSubmit={handleLogin} className="space-y-4">
+              <form onSubmit={handleLogin} className="space-y-4 text-xs">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                    Email đăng nhập <span className="text-rose-400">*</span>
-                  </label>
-                  <div className="relative">
-                    <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
-                    <input
-                      type="email"
-                      value={loginData.email}
-                      onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
-                      placeholder="customer@gmail.com"
-                      className="w-full pl-10 pr-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
+                  <label className="block font-semibold text-slate-700 mb-1">Email đăng nhập *</label>
+                  <input
+                    type="email"
+                    value={loginForm.email}
+                    onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
+                    placeholder="customer@flashdeal.vn hoặc admin@flashdeal.vn"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-blue-900 transition text-xs"
+                  />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                    Mật khẩu <span className="text-rose-400">*</span>
-                  </label>
-                  <div className="relative">
-                    <Key className="w-4 h-4 text-slate-400 absolute left-3.5 top-3.5" />
-                    <input
-                      type="password"
-                      value={loginData.password}
-                      onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
-                      placeholder="••••••••"
-                      className="w-full pl-10 pr-4 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-                    />
-                  </div>
+                  <label className="block font-semibold text-slate-700 mb-1">Mật khẩu *</label>
+                  <input
+                    type="password"
+                    value={loginForm.password}
+                    onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+                    placeholder="••••••••"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-blue-900 transition text-xs font-mono"
+                  />
                 </div>
 
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full py-3 bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white font-bold rounded-xl text-sm shadow-lg shadow-indigo-500/20 active:scale-95 transition disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="w-full py-2.5 px-4 bg-blue-900 hover:bg-blue-950 text-white font-bold rounded-lg transition text-xs shadow-xs flex items-center justify-center gap-1.5"
                 >
-                  <LogIn className="w-4 h-4" />
-                  {loading ? 'Đang xác thực...' : 'Đăng Nhập & Cấp Token'}
+                  <LogIn className="w-3.5 h-3.5" />
+                  <span>{loading ? 'Đang xác thực...' : 'Đăng Nhập Hệ Thống'}</span>
                 </button>
               </form>
             ) : (
-              /* Register Form */
-              <form onSubmit={handleRegister} className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-slate-400">Điền thông tin đăng ký</span>
+              <form onSubmit={handleRegister} className="space-y-4 text-xs">
+                <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                  <span className="text-slate-500 font-medium">Tự động điền dữ liệu để test:</span>
                   <button
                     type="button"
-                    onClick={handleQuickMockCustomer}
-                    className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-semibold"
+                    onClick={handleRandomRegisterData}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded bg-blue-50 text-blue-900 hover:bg-blue-100 border border-blue-200 text-xs font-semibold transition"
                   >
-                    <Sparkles className="w-3.5 h-3.5" /> Tạo dữ liệu mẫu
+                    <Dices className="w-3.5 h-3.5" />
+                    Random Account Data
                   </button>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                    Họ và tên <span className="text-rose-400">*</span>
-                  </label>
+                  <label className="block font-semibold text-slate-700 mb-1">Họ và tên *</label>
                   <input
                     type="text"
-                    value={registerData.fullName}
-                    onChange={(e) => setRegisterData({ ...registerData, fullName: e.target.value })}
+                    value={registerForm.fullName}
+                    onChange={(e) => setRegisterForm({ ...registerForm, fullName: e.target.value })}
                     placeholder="Nguyễn Văn A"
-                    className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                    Email <span className="text-rose-400">*</span>
-                  </label>
-                  <input
-                    type="email"
-                    value={registerData.email}
-                    onChange={(e) => setRegisterData({ ...registerData, email: e.target.value })}
-                    placeholder="customer@gmail.com"
-                    className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                    Mật khẩu (tối thiểu 6 ký tự) <span className="text-rose-400">*</span>
-                  </label>
-                  <input
-                    type="password"
-                    value={registerData.password}
-                    onChange={(e) => setRegisterData({ ...registerData, password: e.target.value })}
-                    placeholder="••••••••"
-                    className="w-full px-4 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-blue-900 transition text-xs"
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">Số điện thoại</label>
+                    <label className="block font-semibold text-slate-700 mb-1">Email *</label>
                     <input
-                      type="text"
-                      value={registerData.phone}
-                      onChange={(e) => setRegisterData({ ...registerData, phone: e.target.value })}
-                      placeholder="0988888888"
-                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                      type="email"
+                      value={registerForm.email}
+                      onChange={(e) => setRegisterForm({ ...registerForm, email: e.target.value })}
+                      placeholder="user@flashdeal.vn"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-blue-900 transition text-xs"
                     />
                   </div>
+
                   <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">Địa chỉ</label>
+                    <label className="block font-semibold text-slate-700 mb-1">Mật khẩu *</label>
                     <input
-                      type="text"
-                      value={registerData.address}
-                      onChange={(e) => setRegisterData({ ...registerData, address: e.target.value })}
-                      placeholder="Hà Nội"
-                      className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                      type="password"
+                      value={registerForm.password}
+                      onChange={(e) => setRegisterForm({ ...registerForm, password: e.target.value })}
+                      placeholder="Password@123"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-blue-900 transition text-xs font-mono"
                     />
                   </div>
                 </div>
 
-                <div className="p-3 bg-indigo-500/10 border border-indigo-500/20 rounded-xl text-xs text-indigo-300 flex items-center gap-2">
-                  <Send className="w-4 h-4 shrink-0 text-indigo-400" />
-                  <span>
-                    Khi đăng ký thành công, sự kiện <b>user.registered.event</b> sẽ được bắn vào Kafka!
-                  </span>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Số điện thoại</label>
+                    <input
+                      type="text"
+                      value={registerForm.phone}
+                      onChange={(e) => setRegisterForm({ ...registerForm, phone: e.target.value })}
+                      placeholder="0988668899"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-blue-900 transition text-xs font-mono"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">Địa chỉ giao hàng</label>
+                    <input
+                      type="text"
+                      value={registerForm.address}
+                      onChange={(e) => setRegisterForm({ ...registerForm, address: e.target.value })}
+                      placeholder="Hà Nội"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-900 focus:outline-none focus:border-blue-900 transition text-xs"
+                    />
+                  </div>
                 </div>
 
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold rounded-xl text-sm shadow-lg shadow-emerald-500/20 active:scale-95 transition disabled:opacity-50 flex items-center justify-center gap-2"
+                  className="w-full py-2.5 px-4 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-lg transition text-xs shadow-xs flex items-center justify-center gap-1.5"
                 >
-                  <UserPlus className="w-4 h-4" />
-                  {loading ? 'Đang tạo tài khoản...' : 'Tạo Tài Khoản & Bắn Kafka'}
+                  <UserPlus className="w-3.5 h-3.5" />
+                  <span>{loading ? 'Đang tạo tài khoản...' : 'Đăng Ký & Phát Kafka Event'}</span>
                 </button>
               </form>
             )}
           </div>
         </div>
 
-        {/* Right Column: Profile & Token Manager */}
+        {/* Right Column: User Profile & Security Tokens Hub */}
         <div className="lg:col-span-6 space-y-6">
-          {/* User Profile Card */}
-          <div className="bg-slate-800 border border-slate-700 rounded-3xl p-6 shadow-xl">
-            <h3 className="font-bold text-white text-base flex items-center gap-2 mb-4 border-b border-slate-700 pb-3">
-              <User className="w-5 h-5 text-indigo-400" />
-              Thông Tin Hồ Sơ (GET /api/auth/profile)
-            </h3>
+          {/* Active User Card */}
+          <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-100">
+              <h3 className="font-bold text-slate-900 text-sm flex items-center gap-1.5">
+                <User className="w-4 h-4 text-blue-900" />
+                Thông Tin Tài Khoản Đang Đăng Nhập
+              </h3>
+              {activeUser && (
+                <span className={`text-[11px] font-bold px-2 py-0.5 rounded border ${
+                  activeUser.role === 'ROLE_ADMIN'
+                    ? 'bg-amber-100 text-amber-900 border-amber-300'
+                    : 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                }`}>
+                  {activeUser.role === 'ROLE_ADMIN' ? '👑 ROLE_ADMIN' : '👤 ROLE_CUSTOMER'}
+                </span>
+              )}
+            </div>
 
-            {profile ? (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-4 bg-slate-900/90 rounded-2xl border border-slate-700">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-500 to-purple-600 flex items-center justify-center font-bold text-lg text-white">
-                      {profile.fullName?.charAt(0) || 'U'}
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-white text-base">{profile.fullName}</h4>
-                      <p className="text-xs text-slate-400 font-mono">{profile.email}</p>
-                    </div>
+            {activeUser ? (
+              <div className="space-y-3 text-xs">
+                <div className="grid grid-cols-2 gap-3 p-3 rounded-lg bg-slate-50 border border-slate-200">
+                  <div>
+                    <span className="text-slate-500">ID Người dùng:</span>
+                    <div className="font-mono font-bold text-slate-900">#{activeUser.id}</div>
                   </div>
-                  <span
-                    className={`px-3 py-1 text-xs font-bold rounded-full border ${
-                      profile.role === 'ROLE_ADMIN'
-                        ? 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-                        : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
-                    }`}
-                  >
-                    {profile.role}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 text-xs">
-                  <div className="p-3 bg-slate-900 rounded-xl border border-slate-700/60">
-                    <span className="text-slate-400 block mb-1">User ID:</span>
-                    <span className="font-mono font-bold text-slate-200">#{profile.id}</span>
+                  <div>
+                    <span className="text-slate-500">Họ và tên:</span>
+                    <div className="font-bold text-slate-900">{activeUser.fullName}</div>
                   </div>
-                  <div className="p-3 bg-slate-900 rounded-xl border border-slate-700/60">
-                    <span className="text-slate-400 block mb-1">Số điện thoại:</span>
-                    <span className="font-mono text-slate-200">{profile.phone || 'Chưa cập nhật'}</span>
+                  <div>
+                    <span className="text-slate-500">Email:</span>
+                    <div className="font-medium text-slate-900">{activeUser.email}</div>
                   </div>
-                  <div className="p-3 bg-slate-900 rounded-xl border border-slate-700/60">
-                    <span className="text-slate-400 block mb-1">Địa chỉ:</span>
-                    <span className="text-slate-200 truncate block">{profile.address || 'Chưa cập nhật'}</span>
-                  </div>
-                  <div className="p-3 bg-slate-900 rounded-xl border border-slate-700/60">
-                    <span className="text-slate-400 block mb-1">Trạng thái:</span>
-                    <span className="text-emerald-400 font-semibold">{profile.status}</span>
+                  <div>
+                    <span className="text-slate-500">Vai trò (Role):</span>
+                    <div className="font-mono font-bold text-blue-900">{activeUser.role}</div>
                   </div>
                 </div>
 
-                {/* Action Buttons */}
-                <div className="flex items-center gap-3 pt-2">
+                <div className="flex items-center gap-2 pt-2">
                   <button
+                    type="button"
                     onClick={handleRefreshToken}
-                    disabled={loading}
-                    className="flex-1 py-2.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 font-semibold rounded-xl text-xs border border-indigo-500/30 transition flex items-center justify-center gap-2"
-                    title="Gọi POST /auth/refresh-token để cấp lại Token mới"
+                    className="flex-1 py-2 px-3 bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200 font-bold rounded-lg transition text-xs flex items-center justify-center gap-1"
                   >
-                    <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-                    Làm Mới Token (Rotate)
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    Test Xoay Vòng Token (Rotation)
                   </button>
 
                   <button
+                    type="button"
                     onClick={handleLogout}
-                    disabled={loading}
-                    className="flex-1 py-2.5 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 font-semibold rounded-xl text-xs border border-rose-500/30 transition flex items-center justify-center gap-2"
-                    title="Gọi POST /auth/logout để đưa Token vào Blacklist Redis"
+                    className="py-2 px-3 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 font-bold rounded-lg transition text-xs flex items-center justify-center gap-1"
                   >
                     <LogOut className="w-3.5 h-3.5" />
-                    Đăng Xuất & Blacklist
+                    Đăng Xuất (Blacklist)
                   </button>
                 </div>
               </div>
             ) : (
-              <div className="text-center py-8 px-4 border border-dashed border-slate-700 rounded-2xl text-slate-400 space-y-2">
-                <AlertTriangle className="w-8 h-8 text-amber-400 mx-auto" />
-                <p className="text-sm font-medium">Chưa có phiên đăng nhập</p>
-                <p className="text-xs text-slate-500 max-w-xs mx-auto">
-                  Hãy đăng nhập hoặc tạo tài khoản ở cột bên trái để nhận JWT Token và xem thông tin hồ sơ.
-                </p>
+              <div className="text-center py-8 text-slate-500 text-xs">
+                Chưa có tài khoản đăng nhập. Hãy bấm một trong 2 nút 1-Click ở trên để trải nghiệm phân quyền!
               </div>
             )}
           </div>
 
-          {/* Token Storage Card */}
-          <div className="bg-slate-800 border border-slate-700 rounded-3xl p-6 shadow-xl space-y-3">
-            <h3 className="font-bold text-white text-base flex items-center gap-2 border-b border-slate-700 pb-3">
-              <Key className="w-5 h-5 text-amber-400" />
-              Token Trong LocalStorage
-            </h3>
-
-            <div>
-              <span className="text-xs font-semibold text-slate-400 block mb-1">Access Token (JWT):</span>
-              <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-700 text-xs font-mono text-emerald-400 truncate">
-                {tokenInfo.accessToken || '(Chưa có token)'}
-              </div>
+          {/* Tokens LocalStorage Viewer */}
+          <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+            <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100">
+              <h3 className="font-bold text-slate-900 text-xs uppercase tracking-wider flex items-center gap-1.5">
+                <KeyRound className="w-4 h-4 text-slate-600" />
+                Chuỗi Token JWT Lưu Trong LocalStorage
+              </h3>
+              <a
+                href="http://localhost:8085"
+                target="_blank"
+                rel="noreferrer"
+                className="text-[11px] font-bold text-blue-700 hover:text-blue-900 flex items-center gap-1"
+              >
+                <span>Xem Kafka-UI (:8085)</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
             </div>
 
-            <div>
-              <span className="text-xs font-semibold text-slate-400 block mb-1">Refresh Token (UUID trên Redis):</span>
-              <div className="p-2.5 bg-slate-950 rounded-xl border border-slate-700 text-xs font-mono text-amber-400 truncate">
-                {tokenInfo.refreshToken || '(Chưa có token)'}
+            <div className="space-y-3 text-xs">
+              <div>
+                <span className="font-semibold text-slate-600">Access Token (Hạn sống 60 phút):</span>
+                <div className="font-mono text-[10px] bg-slate-900 text-slate-300 p-2 rounded-lg break-all mt-1 max-h-16 overflow-y-auto">
+                  {tokens.accessToken || '(Chưa có Token)'}
+                </div>
+              </div>
+
+              <div>
+                <span className="font-semibold text-slate-600">Refresh Token (Hạn sống 7 ngày):</span>
+                <div className="font-mono text-[10px] bg-slate-900 text-slate-300 p-2 rounded-lg break-all mt-1">
+                  {tokens.refreshToken || '(Chưa có Token)'}
+                </div>
               </div>
             </div>
           </div>

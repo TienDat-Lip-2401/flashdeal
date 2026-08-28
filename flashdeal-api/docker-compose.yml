@@ -7,6 +7,7 @@ services:
     container_name: flashdeal-db
     restart: unless-stopped
     environment:
+      TZ: Asia/Ho_Chi_Minh
       POSTGRES_USER: flashdeal_user
       POSTGRES_PASSWORD: flashdeal_password
       POSTGRES_DB: flashdeal_db
@@ -33,6 +34,8 @@ services:
     ports:
       - "6380:6379"
     command: ["redis-server", "--appendonly", "yes"]
+    environment:
+      TZ: Asia/Ho_Chi_Minh
     volumes:
       - redis_data:/data
     networks:
@@ -53,6 +56,7 @@ services:
     ports:
       - "9092:9092"
     environment:
+      TZ: Asia/Ho_Chi_Minh
       KAFKA_NODE_ID: 1
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
       KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://flashdeal-kafka:29092,PLAINTEXT_HOST://localhost:9092'
@@ -87,6 +91,7 @@ services:
     ports:
       - "8085:8080"
     environment:
+      TZ: Asia/Ho_Chi_Minh
       KAFKA_CLUSTERS_0_NAME: flashdeal-cluster
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: flashdeal-kafka:29092
     depends_on:
@@ -107,12 +112,14 @@ services:
     ports:
       - "8082:8082"
     environment:
+      TZ: Asia/Ho_Chi_Minh
       SPRING_DATASOURCE_URL: jdbc:postgresql://flashdeal-db:5432/product_db
       SPRING_DATASOURCE_USERNAME: flashdeal_user
       SPRING_DATASOURCE_PASSWORD: flashdeal_password
       SPRING_DATA_REDIS_HOST: flashdeal-redis
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_KAFKA_BOOTSTRAP_SERVERS: flashdeal-kafka:29092
+      JWT_SECRET_KEY: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
     depends_on:
       flashdeal-db:
         condition: service_healthy
@@ -135,12 +142,14 @@ services:
     ports:
       - "8081:8081"
     environment:
+      TZ: Asia/Ho_Chi_Minh
       SPRING_DATASOURCE_URL: jdbc:postgresql://flashdeal-db:5432/auth_db
       SPRING_DATASOURCE_USERNAME: flashdeal_user
       SPRING_DATASOURCE_PASSWORD: flashdeal_password
       SPRING_DATA_REDIS_HOST: flashdeal-redis
       SPRING_DATA_REDIS_PORT: 6379
       SPRING_KAFKA_BOOTSTRAP_SERVERS: flashdeal-kafka:29092
+      JWT_SECRET_KEY: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
     depends_on:
       flashdeal-db:
         condition: service_healthy
@@ -152,7 +161,59 @@ services:
       - flashdeal-network
 
   # ==========================================
-  # 7. API GATEWAY (:8080 - Cong duy nhat cho Frontend)
+  # 7. FLASHSALE & ORDER ENGINE SERVICE (:8083)
+  # ==========================================
+  flashsale-order-service:
+    build:
+      context: ./flashsale-order-service
+      dockerfile: Dockerfile
+    container_name: flashdeal-order-service
+    restart: unless-stopped
+    ports:
+      - "8083:8083"
+    environment:
+      TZ: Asia/Ho_Chi_Minh
+      SPRING_DATASOURCE_URL: jdbc:postgresql://flashdeal-db:5432/order_db
+      SPRING_DATASOURCE_USERNAME: flashdeal_user
+      SPRING_DATASOURCE_PASSWORD: flashdeal_password
+      SPRING_DATA_REDIS_HOST: flashdeal-redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: flashdeal-kafka:29092
+      JWT_SECRET_KEY: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+    depends_on:
+      flashdeal-db:
+        condition: service_healthy
+      flashdeal-redis:
+        condition: service_healthy
+      flashdeal-kafka:
+        condition: service_healthy
+    networks:
+      - flashdeal-network
+
+  # ==========================================
+  # 8. NOTIFICATION & EMAIL SERVICE (:8086)
+  # ==========================================
+  notification-service:
+    build:
+      context: ./notification-service
+      dockerfile: Dockerfile
+    container_name: flashdeal-notification-service
+    restart: unless-stopped
+    ports:
+      - "8086:8086"
+    environment:
+      TZ: Asia/Ho_Chi_Minh
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: flashdeal-kafka:29092
+      SPRING_MAIL_USERNAME: datnguyentien2401@gmail.com
+      SPRING_MAIL_PASSWORD: mtyibtjpvfsewxch
+    depends_on:
+      flashdeal-kafka:
+        condition: service_healthy
+    networks:
+      - flashdeal-network
+
+  # ==========================================
+  # 9. API GATEWAY (:8080 - Cong duy nhat cho Frontend)
   # ==========================================
   api-gateway:
     build:
@@ -163,11 +224,16 @@ services:
     ports:
       - "8080:8080"
     environment:
+      TZ: Asia/Ho_Chi_Minh
       PRODUCT_SERVICE_URL: http://product-service:8082
       AUTH_SERVICE_URL: http://auth-service:8081
+      ORDER_SERVICE_URL: http://flashsale-order-service:8083
+      NOTIFICATION_SERVICE_URL: http://notification-service:8086
     depends_on:
       - product-service
       - auth-service
+      - flashsale-order-service
+      - notification-service
     networks:
       - flashdeal-network
 

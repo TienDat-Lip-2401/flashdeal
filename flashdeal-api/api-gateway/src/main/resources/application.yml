@@ -24,6 +24,22 @@ spring:
           filters:
             - StripPrefix=1
 
+        # Route cho FlashSale & Order Engine Service (/api/flash-sales/**)
+        - id: flashsale-order-route
+          uri: ${ORDER_SERVICE_URL:http://localhost:8083}
+          predicates:
+            - Path=/api/flash-sales/**
+          filters:
+            - StripPrefix=1
+
+        # Route cho Notification & Email Service (/api/notifications/**)
+        - id: notification-service-route
+          uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8086}
+          predicates:
+            - Path=/api/notifications/**
+          filters:
+            - StripPrefix=1
+
         # Route cho Swagger Docs cua Product Service
         - id: product-docs-route
           uri: ${PRODUCT_SERVICE_URL:http://localhost:8082}
@@ -37,6 +53,22 @@ spring:
           uri: ${AUTH_SERVICE_URL:http://localhost:8081}
           predicates:
             - Path=/auth-docs/**
+          filters:
+            - StripPrefix=1
+
+        # Route cho Swagger Docs cua FlashSale Order Service
+        - id: order-docs-route
+          uri: ${ORDER_SERVICE_URL:http://localhost:8083}
+          predicates:
+            - Path=/order-docs/**
+          filters:
+            - StripPrefix=1
+
+        # Route cho Swagger Docs cua Notification Service
+        - id: notification-docs-route
+          uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8086}
+          predicates:
+            - Path=/notification-docs/**
           filters:
             - StripPrefix=1
 
