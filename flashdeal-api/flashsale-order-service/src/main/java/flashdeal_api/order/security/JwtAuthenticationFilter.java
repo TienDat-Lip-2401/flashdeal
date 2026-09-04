@@ -33,15 +33,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
             if (StringUtils.hasText(jwt) && jwtTokenProvider.validateToken(jwt)) {
                 Long userId = jwtTokenProvider.extractUserId(jwt);
+                String email = jwtTokenProvider.extractEmail(jwt);
                 String role = jwtTokenProvider.extractRole(jwt);
 
                 List<SimpleGrantedAuthority> authorities = role != null
                         ? Collections.singletonList(new SimpleGrantedAuthority(role))
                         : Collections.emptyList();
 
-                // Principal la userId (Long) de Controller co the lay truc tiep
+                // Principal la userId (Long) de Controller co the lay truc tiep, details chua email
                 UsernamePasswordAuthenticationToken authentication =
                         new UsernamePasswordAuthenticationToken(userId, null, authorities);
+                if (email != null) {
+                    authentication.setDetails(email);
+                }
 
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             }

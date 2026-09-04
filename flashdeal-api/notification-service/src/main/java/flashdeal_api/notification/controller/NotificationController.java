@@ -1,6 +1,7 @@
 package flashdeal_api.notification.controller;
 
 import flashdeal_api.notification.model.event.OrderCreatedEvent;
+import flashdeal_api.notification.model.event.UserRegisteredEvent;
 import flashdeal_api.notification.service.EmailService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -65,6 +66,30 @@ public class NotificationController {
         response.put("code", 1000);
         response.put("message", "Da gui email kiem thu thanh cong toi: " + recipient);
         response.put("orderCode", sampleEvent.getOrderCode());
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/test-welcome-email")
+    @Operation(summary = "Gui thu mot Email chao mung thanh vien moi mau",
+               description = "Kich hoat gui truc tiep mot Email HTML chao mung den hop thu de kiem tra giao dien")
+    public ResponseEntity<Map<String, Object>> sendTestWelcomeEmail(@RequestParam(required = false) String targetEmail) {
+        String recipient = (targetEmail != null && !targetEmail.trim().isEmpty()) ? targetEmail : defaultEmail;
+
+        UserRegisteredEvent sampleEvent = UserRegisteredEvent.builder()
+                .userId(999L)
+                .email(recipient)
+                .fullName("Nguyễn Tiến Đạt (Test Welcome)")
+                .phone("0988668899")
+                .role("ROLE_CUSTOMER")
+                .registeredAt(LocalDateTime.now())
+                .build();
+
+        emailService.sendWelcomeEmail(recipient, sampleEvent);
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("code", 1000);
+        response.put("message", "Da gui email chao mung kiem thu thanh cong toi: " + recipient);
+        response.put("email", recipient);
         return ResponseEntity.ok(response);
     }
 }

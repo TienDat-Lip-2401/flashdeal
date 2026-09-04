@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xác Nhận Thanh Toán Đơn Hàng Thành Công</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f1f5f9;
+            color: #1e293b;
+        }
+        .email-container {
+            max-width: 600px;
+            margin: 30px auto;
+            background-color: #ffffff;
+            border-radius: 16px;
+            overflow: hidden;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05);
+        }
+        .header {
+            background-color: #0B192C;
+            padding: 30px 25px;
+            text-align: center;
+            color: #ffffff;
+        }
+        .brand-title {
+            font-size: 24px;
+            font-weight: 800;
+            letter-spacing: 1px;
+            margin: 0;
+            color: #ffffff;
+        }
+        .brand-badge {
+            display: inline-block;
+            background-color: #059669;
+            color: #ecfdf5;
+            font-size: 11px;
+            font-weight: bold;
+            padding: 4px 10px;
+            border-radius: 9999px;
+            margin-top: 8px;
+            letter-spacing: 0.5px;
+        }
+        .content {
+            padding: 30px 25px;
+        }
+        .headline {
+            font-size: 18px;
+            font-weight: 700;
+            color: #065f46;
+            margin-top: 0;
+            margin-bottom: 8px;
+            text-align: center;
+        }
+        .subheadline {
+            font-size: 13px;
+            color: #64748b;
+            text-align: center;
+            margin-bottom: 25px;
+            line-height: 1.5;
+        }
+        .receipt-card {
+            background-color: #f8fafc;
+            border: 1px solid #cbd5e1;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 25px;
+        }
+        .receipt-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px dashed #e2e8f0;
+            font-size: 13px;
+        }
+        .receipt-row:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+        .receipt-label {
+            color: #64748b;
+        }
+        .receipt-value {
+            font-weight: 600;
+            color: #0f172a;
+            text-align: right;
+        }
+        .receipt-value.price {
+            font-size: 18px;
+            font-weight: 800;
+            color: #dc2626;
+        }
+        .receipt-value.code {
+            font-family: 'Courier New', Courier, monospace;
+            color: #1e3a8a;
+            font-weight: bold;
+        }
+        .status-badge {
+            background-color: #d1fae5;
+            color: #065f46;
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+        .shipping-notice {
+            background-color: #ecfdf5;
+            border-left: 4px solid #10b981;
+            padding: 14px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            font-size: 12px;
+            color: #065f46;
+            line-height: 1.6;
+        }
+        .cta-container {
+            text-align: center;
+            margin: 30px 0 10px;
+        }
+        .btn-cta {
+            display: inline-block;
+            background-color: #0B192C;
+            color: #ffffff !important;
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 700;
+            padding: 12px 28px;
+            border-radius: 10px;
+            letter-spacing: 0.5px;
+        }
+        .footer {
+            background-color: #f8fafc;
+            border-top: 1px solid #e2e8f0;
+            padding: 20px 25px;
+            text-align: center;
+            font-size: 11px;
+            color: #94a3b8;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <!-- Header -->
+        <div class="header">
+            <h1 class="brand-title">⚡ FLASHDEAL ENTERPRISE</h1>
+            <div class="brand-badge">✓ CỔNG THANH TOÁN VNPAY SANDBOX</div>
+        </div>
+
+        <!-- Content -->
+        <div class="content">
+            <h2 class="headline">🎉 GIAO DỊCH THANH TOÁN THÀNH CÔNG!</h2>
+            <p class="subheadline">
+                Cảm ơn quý khách! Đơn hàng Flash Sale của bạn đã được thanh toán thành công qua cổng <strong>VNPAY</strong>.
+            </p>
+
+            <!-- Receipt Box -->
+            <div class="receipt-card">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <tr style="border-bottom: 1px dashed #e2e8f0;">
+                        <td style="padding: 9px 0; color: #64748b; font-size: 13px;">Mã đơn hàng:</td>
+                        <td style="padding: 9px 0; text-align: right; font-family: monospace; font-weight: bold; color: #1e3a8a; font-size: 14px;" th:text="${orderCode}">FS-1788364-ABCDEF</td>
+                    </tr>
+                    <tr style="border-bottom: 1px dashed #e2e8f0;">
+                        <td style="padding: 9px 0; color: #64748b; font-size: 13px;">Mã giao dịch VNPAY:</td>
+                        <td style="padding: 9px 0; text-align: right; font-family: monospace; font-weight: 600; color: #0f172a; font-size: 13px;" th:text="${transactionNo}">14567890</td>
+                    </tr>
+                    <tr style="border-bottom: 1px dashed #e2e8f0;">
+                        <td style="padding: 9px 0; color: #64748b; font-size: 13px;">Ngân hàng thanh toán:</td>
+                        <td style="padding: 9px 0; text-align: right; font-weight: 600; color: #0f172a; font-size: 13px;" th:text="${bankCode}">NCB (Ngân hàng Quốc Dân)</td>
+                    </tr>
+                    <tr style="border-bottom: 1px dashed #e2e8f0;">
+                        <td style="padding: 9px 0; color: #64748b; font-size: 13px;">Phương thức:</td>
+                        <td style="padding: 9px 0; text-align: right; font-weight: 600; color: #0f172a; font-size: 13px;">VNPAY Sandbox (Thẻ ATM/QR)</td>
+                    </tr>
+                    <tr style="border-bottom: 1px dashed #e2e8f0;">
+                        <td style="padding: 9px 0; color: #64748b; font-size: 13px;">Thời gian thanh toán:</td>
+                        <td style="padding: 9px 0; text-align: right; font-weight: 600; color: #0f172a; font-size: 13px;" th:text="${paidAt}">14:20:00 03/09/2026</td>
+                    </tr>
+                    <tr style="border-bottom: 1px dashed #e2e8f0;">
+                        <td style="padding: 9px 0; color: #64748b; font-size: 13px;">Trạng thái đơn hàng:</td>
+                        <td style="padding: 9px 0; text-align: right;">
+                            <span style="background-color: #d1fae5; color: #065f46; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: bold;">
+                                ✓ ĐÃ THANH TOÁN (PAID)
+                            </span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 12px 0 4px 0; color: #0f172a; font-size: 14px; font-weight: bold;">Tổng tiền đã thanh toán:</td>
+                        <td style="padding: 12px 0 4px 0; text-align: right; color: #dc2626; font-size: 18px; font-weight: 800;" th:text="${formattedPrice}">34.990.000 đ</td>
+                    </tr>
+                </table>
+            </div>
+
+            <!-- Shipping Notification -->
+            <div class="shipping-notice">
+                📦 <strong>Thông báo kho vận:</strong> Đơn hàng của quý khách đã được chuyển giao sang bộ phận đóng gói. Nhân viên giao hàng hỏa tốc sẽ liên hệ và giao hàng tới địa chỉ của quý khách trong thời gian sớm nhất.
+            </div>
+
+            <!-- CTA Button -->
+            <div class="cta-container">
+                <a th:href="${ordersUrl}" class="btn-cta" target="_blank">
+                    Xem Đơn Hàng Của Tôi ➔
+                </a>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p style="margin: 0 0 6px 0;">Email này được gửi tự động từ Hệ sinh thái Flash Sale Chịu Tải Cao FlashDeal.</p>
+            <p style="margin: 0;">Mọi thắc mắc xin vui lòng liên hệ hotline hỗ trợ 24/7: 1900-8899 hoặc phản hồi trực tiếp email này.</p>
+        </div>
+    </div>
+</body>
+</html>

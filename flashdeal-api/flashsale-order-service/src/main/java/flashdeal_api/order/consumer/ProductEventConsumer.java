@@ -18,7 +18,8 @@ public class ProductEventConsumer {
 
     @KafkaListener(
             topics = KafkaTopicConfig.TOPIC_PRODUCT_EVENTS,
-            groupId = "flashsale-product-sync-group"
+            groupId = "flashsale-product-sync-group",
+            containerFactory = "productEventKafkaListenerContainerFactory"
     )
     public void consumeProductEvent(ProductEvent event) {
         log.info("Received ProductEvent [{}] for productId: {}", event.getEventType(), event.getProductId());

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { flashSaleApi } from '../api/flashSaleApi';
 import { productApi } from '../api/productApi';
 import { getRandomCampaign } from '../utils/mockGenerator';
@@ -77,6 +78,7 @@ function OrderCountdown({ expiresAt, onExpired }) {
 }
 
 export default function FlashSaleHub({ setLastResponse, showToast, onSelectProduct, activeUser, onNavigate }) {
+  const navigate = useNavigate();
   const isAdmin = activeUser?.role === 'ROLE_ADMIN';
   const [activeTab, setActiveTab] = useState('campaigns'); // 'campaigns' | 'my-orders' | 'admin-campaign'
   const [campaigns, setCampaigns] = useState([]);
@@ -221,6 +223,7 @@ export default function FlashSaleHub({ setLastResponse, showToast, onSelectProdu
         productId,
         shippingAddress: activeUser.address || 'Tòa nhà VinUni, Vinhomes Ocean Park, Gia Lâm, Hà Nội',
         phone: activeUser.phone || '0988668899',
+        email: activeUser.email,
       };
       const res = await flashSaleApi.createOrder(payload);
       const elapsed = Math.round(performance.now() - startTime);
@@ -407,13 +410,11 @@ export default function FlashSaleHub({ setLastResponse, showToast, onSelectProdu
             </div>
 
             <button
-              onClick={() => {
-                setActiveTab('my-orders');
-                fetchMyOrders();
-              }}
-              className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-lg transition"
+              onClick={() => navigate('/orders')}
+              className="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold rounded-xl transition flex items-center gap-1.5 shadow-sm hover:shadow"
             >
-              Xem Chi Tiết Đơn Hàng →
+              <span>Xem Đơn Hàng Của Tôi</span>
+              <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>

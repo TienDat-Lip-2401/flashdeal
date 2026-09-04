@@ -24,16 +24,21 @@ public class OrderCreatedNotificationConsumer {
      */
     @KafkaListener(
             topics = "${spring.kafka.topic.order-created:flashsale.order.created}",
-            groupId = "${spring.kafka.consumer.group-id:notification-service-group}"
+            groupId = "${spring.kafka.consumer.group-id:notification-service-group}",
+            containerFactory = "orderCreatedKafkaListenerContainerFactory"
     )
     public void consumeOrderCreatedEvent(OrderCreatedEvent event) {
         log.info("OrderCreatedNotificationConsumer: Received event for orderCode: {}, productId: {}, userId: {}",
                 event.getOrderCode(), event.getProductId(), event.getUserId());
 
         try {
-            // Gui email toi dia chi nguoi nhan (mac dinh gui toi hop thu cua ban de kiem thu)
-            emailService.sendOrderCreatedEmail(defaultNotificationEmail, event);
-            log.info("OrderCreatedNotificationConsumer: Processed email successfully for orderCode: {}", event.getOrderCode());
+            // Gui email toi dia chi nguoi nhan (uu tien email nguoi dat hang, neu trong thi fallback ve default email)
+            String recipient = (event.getEmail() != null && !event.getEmail().trim().isEmpty())
+                    ? event.getEmail().trim()
+                    : defaultNotificationEmail;
+
+            emailService.sendOrderCreatedEmail(recipient, event);
+            log.info("OrderCreatedNotificationConsumer: Processed email successfully for orderCode: {} to: {}", event.getOrderCode(), recipient);
         } catch (Exception e) {
             log.error("OrderCreatedNotificationConsumer: Error processing notification for orderCode: {}", event.getOrderCode(), e);
         }

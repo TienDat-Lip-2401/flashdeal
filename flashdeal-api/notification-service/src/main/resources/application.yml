@@ -10,6 +10,7 @@ spring:
     bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     topic:
       order-created: flashsale.order.created
+      user-registered: user.registered.event
     consumer:
       group-id: notification-service-group
       auto-offset-reset: earliest

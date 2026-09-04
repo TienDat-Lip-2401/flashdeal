@@ -22,4 +22,6 @@ public class FlashSaleOrderRequest {
 
     @NotBlank(message = "Số điện thoại nhận hàng không được để trống")
     private String phone;
+
+    private String email;
 }

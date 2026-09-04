@@ -27,7 +27,8 @@ public class OrderCreatedConsumer {
     @KafkaListener(
             topics = KafkaTopicConfig.TOPIC_FLASHSALE_ORDER_CREATED,
             groupId = "flashsale-order-group",
-            concurrency = "4"
+            concurrency = "4",
+            containerFactory = "orderCreatedKafkaListenerContainerFactory"
     )
     public void consumeOrderCreated(OrderCreatedEvent event) {
         log.info("Consumer received OrderCreatedEvent: orderCode={}, user={}, product={}",

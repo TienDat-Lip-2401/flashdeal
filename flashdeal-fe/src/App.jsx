@@ -7,6 +7,7 @@ import FlashSaleHub from './components/FlashSaleHub';
 import AdminDashboard from './components/AdminDashboard';
 import AuthManager from './components/AuthManager';
 import ProductDetail from './components/ProductDetail';
+import MyOrders from './components/MyOrders';
 import ApiResponseModal from './components/ApiResponseModal';
 import { authApi } from './api/authApi';
 import {
@@ -120,6 +121,17 @@ export default function App() {
               />
             }
           />
+          <Route
+            path="/orders"
+            element={
+              <MyOrders
+                setLastResponse={setLastResponse}
+                showToast={showToast}
+                activeUser={activeUser}
+              />
+            }
+          />
+          <Route path="/my-orders" element={<Navigate to="/orders" replace />} />
           <Route
             path="/admin"
             element={

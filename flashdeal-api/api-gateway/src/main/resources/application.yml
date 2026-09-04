@@ -40,6 +40,14 @@ spring:
           filters:
             - StripPrefix=1
 
+        # Route cho Payment Service (/api/payments/**)
+        - id: payment-service-route
+          uri: ${PAYMENT_SERVICE_URL:http://localhost:8084}
+          predicates:
+            - Path=/api/payments/**
+          filters:
+            - StripPrefix=1
+
         # Route cho Swagger Docs cua Product Service
         - id: product-docs-route
           uri: ${PRODUCT_SERVICE_URL:http://localhost:8082}
@@ -69,6 +77,14 @@ spring:
           uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8086}
           predicates:
             - Path=/notification-docs/**
+          filters:
+            - StripPrefix=1
+
+        # Route cho Swagger Docs cua Payment Service
+        - id: payment-docs-route
+          uri: ${PAYMENT_SERVICE_URL:http://localhost:8084}
+          predicates:
+            - Path=/payment-docs/**
           filters:
             - StripPrefix=1
 

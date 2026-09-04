@@ -1,11 +1,19 @@
+# Cấu hình giới hạn kích thước file Log cho toàn bộ Container (Ngăn chặn tràn ổ C)
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   # ==========================================
-  # 1. POSTGRESQL 16 (Chua 4 Database rieng biet)
+  # 1. POSTGRESQL 16 (Chứa các Database riêng biệt)
   # ==========================================
   flashdeal-db:
     image: postgres:16-alpine
     container_name: flashdeal-db
     restart: unless-stopped
+    logging: *default-logging
     environment:
       TZ: Asia/Ho_Chi_Minh
       POSTGRES_USER: flashdeal_user
@@ -31,6 +39,7 @@ services:
     image: redis:7-alpine
     container_name: flashdeal-redis
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "6380:6379"
     command: ["redis-server", "--appendonly", "yes"]
@@ -47,12 +56,13 @@ services:
       retries: 5
 
   # ==========================================
-  # 3. APACHE KAFKA 3.7 (Che do KRaft)
+  # 3. APACHE KAFKA 3.7 (Chế độ KRaft)
   # ==========================================
   flashdeal-kafka:
     image: confluentinc/cp-kafka:7.6.0
     container_name: flashdeal-kafka
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "9092:9092"
     environment:
@@ -82,12 +92,13 @@ services:
       retries: 5
 
   # ==========================================
-  # 4. KAFKA UI (Giao dien quan ly Topics & Partitions)
+  # 4. KAFKA UI (Giao diện quản lý Topics & Partitions)
   # ==========================================
   flashdeal-kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: flashdeal-kafka-ui
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "8085:8080"
     environment:
@@ -109,6 +120,7 @@ services:
       dockerfile: Dockerfile
     container_name: flashdeal-product-service
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "8082:8082"
     environment:
@@ -139,6 +151,7 @@ services:
       dockerfile: Dockerfile
     container_name: flashdeal-auth-service
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "8081:8081"
     environment:
@@ -169,6 +182,7 @@ services:
       dockerfile: Dockerfile
     container_name: flashdeal-order-service
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "8083:8083"
     environment:
@@ -199,6 +213,7 @@ services:
       dockerfile: Dockerfile
     container_name: flashdeal-notification-service
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "8086:8086"
     environment:
@@ -213,7 +228,35 @@ services:
       - flashdeal-network
 
   # ==========================================
-  # 9. API GATEWAY (:8080 - Cong duy nhat cho Frontend)
+  # 8b. PAYMENT SERVICE (:8084)
+  # ==========================================
+  payment-service:
+    build:
+      context: ./payment-service
+      dockerfile: Dockerfile
+    container_name: flashdeal-payment-service
+    restart: unless-stopped
+    logging: *default-logging
+    ports:
+      - "8084:8084"
+    environment:
+      TZ: Asia/Ho_Chi_Minh
+      SPRING_DATASOURCE_URL: jdbc:postgresql://flashdeal-db:5432/payment_db
+      SPRING_DATASOURCE_USERNAME: flashdeal_user
+      SPRING_DATASOURCE_PASSWORD: flashdeal_password
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: flashdeal-kafka:29092
+      VNP_TMN_CODE: 7CW0K93X
+      VNP_HASH_SECRET: CGTQWUEKMFNKSAZNQWLLZNAAFKEYLREX
+    depends_on:
+      flashdeal-db:
+        condition: service_healthy
+      flashdeal-kafka:
+        condition: service_healthy
+    networks:
+      - flashdeal-network
+
+  # ==========================================
+  # 9. API GATEWAY (:8080 - Cổng duy nhất cho Frontend)
   # ==========================================
   api-gateway:
     build:
@@ -221,6 +264,7 @@ services:
       dockerfile: Dockerfile
     container_name: flashdeal-gateway
     restart: unless-stopped
+    logging: *default-logging
     ports:
       - "8080:8080"
     environment:
@@ -229,11 +273,13 @@ services:
       AUTH_SERVICE_URL: http://auth-service:8081
       ORDER_SERVICE_URL: http://flashsale-order-service:8083
       NOTIFICATION_SERVICE_URL: http://notification-service:8086
+      PAYMENT_SERVICE_URL: http://payment-service:8084
     depends_on:
       - product-service
       - auth-service
       - flashsale-order-service
       - notification-service
+      - payment-service
     networks:
       - flashdeal-network
 

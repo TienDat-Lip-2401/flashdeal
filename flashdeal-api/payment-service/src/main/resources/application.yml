@@ -1,0 +1,57 @@
+server:
+  port: 8084
+  servlet:
+    context-path: /
+
+spring:
+  application:
+    name: payment-service
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5434/payment_db}
+    username: ${SPRING_DATASOURCE_USERNAME:flashdeal_user}
+    password: ${SPRING_DATASOURCE_PASSWORD:flashdeal_password}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      idle-timeout: 30000
+      pool-name: PaymentHikariPool
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.add.type.headers: false
+    topic:
+      payment-successful: payment.successful.event
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+vnpay:
+  tmn-code: ${VNP_TMN_CODE:7CW0K93X}
+  hash-secret: ${VNP_HASH_SECRET:CGTQWUEKMFNKSAZNQWLLZNAAFKEYLREX}
+  pay-url: ${VNP_PAY_URL:https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
+  return-url: ${VNP_RETURN_URL:http://localhost:5173/orders}
+  version: "2.1.0"
+  command: "pay"
+
+logging:
+  level:
+    root: INFO
+    flashdeal_api.payment: DEBUG

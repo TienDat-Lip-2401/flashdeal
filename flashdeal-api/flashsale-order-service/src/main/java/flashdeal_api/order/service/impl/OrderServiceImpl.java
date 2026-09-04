@@ -20,8 +20,10 @@ import flashdeal_api.order.service.FlashSalePreHeatService;
 import flashdeal_api.order.service.OrderService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.Collections;
@@ -88,10 +90,20 @@ public class OrderServiceImpl implements OrderService {
         String orderCode = "FS-" + System.currentTimeMillis() + "-" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
         LocalDateTime expiresAt = now.plusMinutes(15);
 
+        // Lay email nguoi dat tu request hoac tu JWT SecurityContext
+        String customerEmail = request.getEmail();
+        if (!StringUtils.hasText(customerEmail)) {
+            var auth = SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.getDetails() instanceof String emailStr && StringUtils.hasText(emailStr)) {
+                customerEmail = emailStr;
+            }
+        }
+
         // 5. Dong goi Event va ban vao Kafka (Partition Key: productId)
         OrderCreatedEvent event = OrderCreatedEvent.builder()
                 .orderCode(orderCode)
                 .userId(userId)
+                .email(customerEmail)
                 .campaignId(request.getCampaignId())
                 .productId(request.getProductId())
                 .productName(product.getProductName())

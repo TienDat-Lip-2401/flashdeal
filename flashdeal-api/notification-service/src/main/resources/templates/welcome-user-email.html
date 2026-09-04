@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chào Mừng Bạn Đến Với FlashDeal Enterprise</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f1f5f9;
+            color: #1e293b;
+        }
+        .email-container {
+            max-width: 600px;
+            margin: 30px auto;
+            background-color: #ffffff;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        }
+        .header {
+            background-color: #0B192C;
+            padding: 30px 25px;
+            text-align: center;
+            color: #ffffff;
+        }
+        .brand-title {
+            font-size: 22px;
+            font-weight: 800;
+            letter-spacing: 1px;
+            margin: 0;
+            color: #ffffff;
+        }
+        .brand-badge {
+            display: inline-block;
+            background-color: #1e3a8a;
+            color: #93c5fd;
+            font-size: 10px;
+            font-weight: bold;
+            padding: 3px 8px;
+            border-radius: 9999px;
+            margin-top: 6px;
+            letter-spacing: 0.5px;
+        }
+        .content {
+            padding: 30px 25px;
+        }
+        .headline {
+            font-size: 20px;
+            font-weight: 700;
+            color: #0f172a;
+            margin-top: 0;
+            margin-bottom: 12px;
+        }
+        .welcome-box {
+            background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+            border: 1px solid #bfdbfe;
+            border-radius: 10px;
+            padding: 16px 20px;
+            margin-bottom: 24px;
+        }
+        .welcome-title {
+            font-size: 14px;
+            font-weight: 700;
+            color: #1e40af;
+            margin-bottom: 4px;
+        }
+        .welcome-desc {
+            font-size: 13px;
+            color: #1e3a8a;
+            line-height: 1.5;
+            margin: 0;
+        }
+        .info-card {
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 24px;
+        }
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            border-bottom: 1px dashed #e2e8f0;
+            font-size: 13px;
+        }
+        .info-row:last-child {
+            border-bottom: none;
+        }
+        .info-label {
+            color: #64748b;
+            font-weight: 600;
+        }
+        .info-value {
+            color: #0f172a;
+            font-weight: 700;
+        }
+        .feature-grid {
+            margin-bottom: 24px;
+        }
+        .feature-item {
+            padding: 10px 0;
+            font-size: 13px;
+            color: #334155;
+            line-height: 1.6;
+        }
+        .action-button {
+            display: block;
+            width: 100%;
+            max-width: 240px;
+            margin: 25px auto 10px auto;
+            text-align: center;
+            background-color: #1e3a8a;
+            color: #ffffff !important;
+            padding: 12px 20px;
+            font-size: 13px;
+            font-weight: 700;
+            text-decoration: none;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .footer {
+            background-color: #f8fafc;
+            border-top: 1px solid #e2e8f0;
+            padding: 20px 25px;
+            text-align: center;
+            font-size: 11px;
+            color: #94a3b8;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+<div class="email-container">
+    <!-- Header -->
+    <div class="header">
+        <h1 class="brand-title">FLASHDEAL ENTERPRISE</h1>
+        <div class="brand-badge">HIGH-CONCURRENCY FLASH SALE PLATFORM</div>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+        <h2 class="headline">Chào Mừng Gia Nhập FlashDeal! 🎉</h2>
+        <p style="font-size: 13px; color: #475569; line-height: 1.6;">
+            Kính gửi <strong th:text="${fullName}">Quý khách</strong>,<br>
+            Cảm ơn bạn đã đăng ký tài khoản tại nền tảng thương mại điện tử <strong>FlashDeal Enterprise</strong>. Tài khoản của bạn đã được kích hoạt và sẵn sàng tham gia các chiến dịch săn deal tốc độ cao.
+        </p>
+
+        <!-- Welcome Box -->
+        <div class="welcome-box">
+            <div class="welcome-title">⚡ Sẵn Sàng Săn Deal Chớp Nhoáng</div>
+            <p class="welcome-desc">
+                Hệ thống kiến trúc Microservices xử lý đến 50.000 yêu cầu/giây giúp bạn săn hàng nghìn sản phẩm giảm giá cực sốc với độ trễ phản hồi dưới 5ms.
+            </p>
+        </div>
+
+        <!-- Account Info Summary -->
+        <div class="info-card">
+            <div style="font-size: 12px; text-transform: uppercase; font-weight: 700; color: #64748b; margin-bottom: 8px;">
+                Thông Tin Tài Khoản Của Bạn
+            </div>
+            <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                <tr>
+                    <td style="padding: 6px 0; color: #64748b; width: 40%;">Họ và tên:</td>
+                    <td style="padding: 6px 0; font-weight: 700; color: #0f172a;" th:text="${fullName}">Nguyễn Tiến Đạt</td>
+                </tr>
+                <tr>
+                    <td style="padding: 6px 0; color: #64748b;">Email đăng nhập:</td>
+                    <td style="padding: 6px 0; font-weight: 700; color: #1e3a8a;" th:text="${email}">user@example.com</td>
+                </tr>
+                <tr>
+                    <td style="padding: 6px 0; color: #64748b;">Số điện thoại:</td>
+                    <td style="padding: 6px 0; font-weight: 700; color: #0f172a;" th:text="${phone}">0988668899</td>
+                </tr>
+                <tr>
+                    <td style="padding: 6px 0; color: #64748b;">Thời gian đăng ký:</td>
+                    <td style="padding: 6px 0; font-weight: 700; color: #0f172a;" th:text="${registeredAt}">20:00:00 02/09/2026</td>
+                </tr>
+            </table>
+        </div>
+
+        <!-- Highlights -->
+        <div class="feature-grid">
+            <div class="feature-item">
+                🚀 <strong>Tốc độ cực đỉnh:</strong> Tận hưởng trải nghiệm săn deal mượt mà không lo nghẽn mạng hay sập hệ thống.
+            </div>
+            <div class="feature-item">
+                🔒 <strong>Kho hàng chính xác:</strong> Hệ thống kiểm soát tồn kho phân tán chống overselling tuyệt đối.
+            </div>
+            <div class="feature-item">
+                ⏱️ <strong>Giữ chỗ 15 phút:</strong> Khi săn deal thành công, bạn có 15 phút để hoàn tất thanh toán trước khi đơn hàng tự động hoàn kho.
+            </div>
+        </div>
+
+        <!-- CTA Button -->
+        <a th:href="${shopUrl}" class="action-button">
+            Khám Phá Săn Deal Ngay ⚡
+        </a>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+        © 2026 FlashDeal Inc. Hệ thống vi dịch vụ phân tán chịu tải cao.<br>
+        Đây là email tự động gửi từ Notification Service qua Apache Kafka. Vui lòng không trả lời thư này.
+    </div>
+</div>
+</body>
+</html>

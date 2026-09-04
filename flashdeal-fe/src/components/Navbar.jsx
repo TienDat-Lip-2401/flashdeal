@@ -13,7 +13,8 @@ import {
   User,
   ChevronDown,
   Mail,
-  ShieldAlert
+  ShieldAlert,
+  PackageCheck
 } from 'lucide-react';
 
 export default function Navbar({ lastResponse, onOpenResponseModal, activeUser, onLogout }) {
@@ -36,6 +37,7 @@ export default function Navbar({ lastResponse, onOpenResponseModal, activeUser, 
   const navItems = [
     { to: '/', label: 'Sàn Sản Phẩm', icon: ShoppingBag },
     { to: '/flash-sale', label: 'Săn Deal Flash Sale ⚡', icon: Zap, badge: '50k req/s' },
+    { to: '/orders', label: 'Đơn Hàng Của Tôi', icon: PackageCheck },
     ...(isAdmin ? [{ to: '/admin', label: 'Quản Trị Hệ Thống', icon: LayoutDashboard, badge: '👑 Admin' }] : []),
     { to: '/auth', label: 'Tài Khoản & Bảo Mật JWT', icon: ShieldCheck },
   ];
@@ -185,6 +187,15 @@ export default function Navbar({ lastResponse, onOpenResponseModal, activeUser, 
                       >
                         <Zap className="w-4 h-4 text-red-600" />
                         <span>Săn Deal Flash Sale</span>
+                      </Link>
+
+                      <Link
+                        to="/orders"
+                        onClick={() => setIsDropdownOpen(false)}
+                        className="flex items-center gap-2 p-2 rounded-lg hover:bg-emerald-50 text-emerald-800 transition"
+                      >
+                        <PackageCheck className="w-4 h-4 text-emerald-600" />
+                        <span>Đơn Hàng Của Tôi</span>
                       </Link>
                     </div>
 

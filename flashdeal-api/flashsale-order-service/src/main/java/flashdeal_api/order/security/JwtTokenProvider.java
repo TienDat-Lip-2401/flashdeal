@@ -44,7 +44,8 @@ public class JwtTokenProvider {
 
     public String extractEmail(String token) {
         Claims claims = extractAllClaims(token);
-        return claims.getSubject();
+        String email = claims.get("email", String.class);
+        return (email != null && !email.trim().isEmpty()) ? email : claims.getSubject();
     }
 
     public String extractRole(String token) {

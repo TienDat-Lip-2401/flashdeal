@@ -23,6 +23,7 @@
         <module>auth-service</module>
         <module>flashsale-order-service</module>
         <module>notification-service</module>
+        <module>payment-service</module>
     </modules>
 
     <properties>

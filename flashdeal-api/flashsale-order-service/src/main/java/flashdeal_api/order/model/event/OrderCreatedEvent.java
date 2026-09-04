@@ -1,6 +1,7 @@
 package flashdeal_api.order.model.event;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import lombok.*;
 
 import java.io.Serializable;
@@ -12,10 +13,12 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class OrderCreatedEvent implements Serializable {
 
     private String orderCode;
     private Long userId;
+    private String email;
     private Long campaignId;
     private Long productId;
     private String productName;
