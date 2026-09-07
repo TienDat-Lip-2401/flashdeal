@@ -24,7 +24,8 @@ import {
   FileText,
   X,
   Zap,
-  ShoppingBag
+  ShoppingBag,
+  Truck
 } from 'lucide-react';
 import { flashSaleApi } from '../api/flashSaleApi';
 import { paymentApi } from '../api/paymentApi';
@@ -225,6 +226,24 @@ export default function MyOrders({ setLastResponse, showToast, activeUser }) {
     }
   };
 
+  const handleConfirmDelivered = async (orderCode) => {
+    if (!window.confirm(`Bạn có chắc chắn đã nhận được toàn bộ kiện hàng của đơn ${orderCode}?`)) {
+      return;
+    }
+    setProcessingCode(orderCode);
+    try {
+      const res = await flashSaleApi.confirmDelivered(orderCode);
+      if (setLastResponse) setLastResponse(res);
+      showToast(`🎉 Xác nhận đã nhận hàng thành công cho đơn [${orderCode}]! Cảm ơn bạn đã mua hàng.`, 'success');
+      fetchOrders();
+    } catch (err) {
+      if (setLastResponse) setLastResponse(err);
+      showToast(`Lỗi xác nhận nhận hàng: ${err.message}`, 'error');
+    } finally {
+      setProcessingCode(null);
+    }
+  };
+
   const handleTriggerCancelExpired = async () => {
     try {
       const res = await flashSaleApi.triggerCancelExpired();
@@ -261,6 +280,8 @@ export default function MyOrders({ setLastResponse, showToast, activeUser }) {
 
   const pendingCount = orders.filter((o) => o.status === 'PENDING').length;
   const paidCount = orders.filter((o) => o.status === 'PAID').length;
+  const shippingCount = orders.filter((o) => o.status === 'SHIPPING').length;
+  const deliveredCount = orders.filter((o) => o.status === 'DELIVERED').length;
   const cancelledCount = orders.filter((o) => o.status === 'CANCELLED' || o.status === 'EXPIRED').length;
 
   if (!activeUser) {
@@ -366,14 +387,46 @@ export default function MyOrders({ setLastResponse, showToast, activeUser }) {
             onClick={() => setFilterStatus('PAID')}
             className={`px-3.5 py-1.5 rounded-lg transition whitespace-nowrap flex items-center gap-1.5 ${
               filterStatus === 'PAID'
+                ? 'bg-white text-blue-900 shadow-xs'
+                : 'text-slate-600 hover:text-blue-800'
+            }`}
+          >
+            <PackageCheck className="w-3.5 h-3.5 text-blue-600" />
+            <span>Đang Chuẩn Bị</span>
+            <span className="px-1.5 py-0.2 rounded-full bg-blue-50 text-blue-700 text-[10px] font-mono">
+              {paidCount}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setFilterStatus('SHIPPING')}
+            className={`px-3.5 py-1.5 rounded-lg transition whitespace-nowrap flex items-center gap-1.5 ${
+              filterStatus === 'SHIPPING'
+                ? 'bg-white text-purple-900 shadow-xs'
+                : 'text-slate-600 hover:text-purple-800'
+            }`}
+          >
+            <Truck className="w-3.5 h-3.5 text-purple-600" />
+            <span>Đang Giao Hàng</span>
+            {shippingCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full bg-purple-100 text-purple-900 text-[10px] font-mono font-extrabold animate-pulse">
+                {shippingCount}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setFilterStatus('DELIVERED')}
+            className={`px-3.5 py-1.5 rounded-lg transition whitespace-nowrap flex items-center gap-1.5 ${
+              filterStatus === 'DELIVERED'
                 ? 'bg-white text-emerald-900 shadow-xs'
                 : 'text-slate-600 hover:text-emerald-800'
             }`}
           >
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Đã Thanh Toán</span>
+            <span>Đã Nhận Hàng</span>
             <span className="px-1.5 py-0.2 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-mono">
-              {paidCount}
+              {deliveredCount}
             </span>
           </button>
 
@@ -435,6 +488,8 @@ export default function MyOrders({ setLastResponse, showToast, activeUser }) {
           {filteredOrders.map((order) => {
             const isPending = order.status === 'PENDING';
             const isPaid = order.status === 'PAID';
+            const isShipping = order.status === 'SHIPPING';
+            const isDelivered = order.status === 'DELIVERED';
             const isCancelled = order.status === 'CANCELLED' || order.status === 'EXPIRED';
 
             return (
@@ -482,17 +537,27 @@ export default function MyOrders({ setLastResponse, showToast, activeUser }) {
                         isPending
                           ? 'bg-amber-100 text-amber-900 border-amber-300'
                           : isPaid
+                          ? 'bg-blue-100 text-blue-900 border-blue-300'
+                          : isShipping
+                          ? 'bg-purple-100 text-purple-900 border-purple-300'
+                          : isDelivered
                           ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
                           : 'bg-slate-100 text-slate-600 border-slate-200'
                       }`}
                     >
                       {isPending && <Clock className="w-3.5 h-3.5 text-amber-700" />}
-                      {isPaid && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />}
+                      {isPaid && <PackageCheck className="w-3.5 h-3.5 text-blue-700" />}
+                      {isShipping && <Truck className="w-3.5 h-3.5 text-purple-700" />}
+                      {isDelivered && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />}
                       {isCancelled && <XCircle className="w-3.5 h-3.5 text-slate-500" />}
                       {isPending
                         ? 'CHỜ THANH TOÁN'
                         : isPaid
-                        ? 'ĐÃ THANH TOÁN'
+                        ? 'ĐANG CHUẨN BỊ HÀNG'
+                        : isShipping
+                        ? 'ĐANG GIAO HÀNG'
+                        : isDelivered
+                        ? 'ĐÃ NHẬN HÀNG'
                         : 'ĐÃ HỦY (HOÀN KHO)'}
                     </span>
                   </div>
@@ -590,9 +655,33 @@ export default function MyOrders({ setLastResponse, showToast, activeUser }) {
                       )}
 
                       {isPaid && (
-                        <div className="text-xs text-emerald-700 font-bold flex items-center gap-1 bg-emerald-50 px-3 py-1.5 rounded-xl border border-emerald-200">
+                        <div className="text-xs text-blue-700 font-bold flex items-center gap-1.5 bg-blue-50 px-3 py-2 rounded-xl border border-blue-200">
+                          <PackageCheck className="w-4 h-4 text-blue-600" />
+                          <span>Shop đang chuẩn bị hàng</span>
+                        </div>
+                      )}
+
+                      {isShipping && (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="text-xs text-purple-700 font-bold flex items-center gap-1.5 bg-purple-50 px-3 py-2 rounded-xl border border-purple-200">
+                            <Truck className="w-4 h-4 text-purple-600 animate-bounce" />
+                            <span>Đang giao hàng</span>
+                          </div>
+                          <button
+                            onClick={() => handleConfirmDelivered(order.orderCode)}
+                            disabled={processingCode === order.orderCode}
+                            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-extrabold shadow-sm transition cursor-pointer"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Đã Nhận Được Hàng</span>
+                          </button>
+                        </div>
+                      )}
+
+                      {isDelivered && (
+                        <div className="text-xs text-emerald-700 font-bold flex items-center gap-1.5 bg-emerald-50 px-3 py-2 rounded-xl border border-emerald-200">
                           <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                          <span>Đang chuẩn bị hàng</span>
+                          <span>Đã nhận hàng thành công</span>
                         </div>
                       )}
 
@@ -865,7 +954,14 @@ export default function MyOrders({ setLastResponse, showToast, activeUser }) {
               </div>
               <div className="flex justify-between border-b border-slate-100 pb-3">
                 <span className="text-slate-500">Trạng thái:</span>
-                <span className="font-bold text-slate-900">{selectedOrderForDetail.status}</span>
+                <span className="font-bold text-slate-900">
+                  {selectedOrderForDetail.status === 'PENDING' && 'Chờ thanh toán'}
+                  {selectedOrderForDetail.status === 'PAID' && 'Đang chuẩn bị hàng'}
+                  {selectedOrderForDetail.status === 'SHIPPING' && 'Đang giao hàng'}
+                  {selectedOrderForDetail.status === 'DELIVERED' && 'Đã nhận hàng'}
+                  {selectedOrderForDetail.status === 'CANCELLED' && 'Đã hủy (Hoàn kho)'}
+                  {selectedOrderForDetail.status === 'EXPIRED' && 'Quá hạn thanh toán'}
+                </span>
               </div>
               <div className="flex justify-between border-b border-slate-100 pb-3">
                 <span className="text-slate-500">Thời gian tạo:</span>

@@ -21,7 +21,8 @@ public enum ErrorCode {
     ORDER_CANNOT_BE_CANCELLED(3007, "Đơn hàng này không thể hủy", HttpStatus.BAD_REQUEST),
     CAMPAIGN_TIME_INVALID(3008, "Thời gian bắt đầu phải trước thời gian kết thúc", HttpStatus.BAD_REQUEST),
     PRODUCT_ALREADY_IN_CAMPAIGN(3009, "Sản phẩm đã tồn tại trong chiến dịch này", HttpStatus.BAD_REQUEST),
-    REDIS_OPERATION_FAILED(3010, "Lỗi khi xử lý thao tác với Redis", HttpStatus.INTERNAL_SERVER_ERROR);
+    REDIS_OPERATION_FAILED(3010, "Lỗi khi xử lý thao tác với Redis", HttpStatus.INTERNAL_SERVER_ERROR),
+    ORDER_CANNOT_BE_CONFIRMED(3011, "Chỉ có thể xác nhận khi đơn hàng đang giao hoặc đang chuẩn bị hàng", HttpStatus.BAD_REQUEST);
 
     private final int code;
     private final String message;

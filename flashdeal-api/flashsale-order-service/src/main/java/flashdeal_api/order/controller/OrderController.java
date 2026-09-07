@@ -1,5 +1,6 @@
 package flashdeal_api.order.controller;
 
+import flashdeal_api.order.entity.OrderStatus;
 import flashdeal_api.order.exception.AppException;
 import flashdeal_api.order.exception.ErrorCode;
 import flashdeal_api.order.model.ApiResponse;
@@ -95,5 +96,36 @@ public class OrderController {
     public ResponseEntity<ApiResponse<Integer>> cancelExpiredOrders() {
         int count = orderService.cancelExpiredOrders();
         return ResponseEntity.ok(ApiResponse.success("Đã quét và hủy thành công " + count + " đơn hàng quá hạn", count));
+    }
+
+    @GetMapping("/admin/all")
+    @Operation(summary = "Lấy toàn bộ đơn hàng trong hệ thống (Dành cho Quản Trị Viên)")
+    public ResponseEntity<ApiResponse<List<OrderResponse>>> getAllOrdersForAdmin(
+            @RequestParam(value = "status", required = false) OrderStatus status) {
+        List<OrderResponse> orders = orderService.getAllOrdersForAdmin(status);
+        return ResponseEntity.ok(ApiResponse.success(orders));
+    }
+
+    @PutMapping("/admin/{orderCode}/status")
+    @Operation(summary = "Admin cập nhật trạng thái đơn hàng (PAID -> SHIPPING -> DELIVERED hoặc CANCELLED)")
+    public ResponseEntity<ApiResponse<OrderResponse>> updateOrderStatusByAdmin(
+            @PathVariable String orderCode,
+            @RequestParam("status") OrderStatus status) {
+        OrderResponse response = orderService.updateOrderStatusByAdmin(orderCode, status);
+        return ResponseEntity.ok(ApiResponse.success("Cập nhật trạng thái đơn hàng thành công!", response));
+    }
+
+    @PutMapping("/{orderCode}/confirm-delivered")
+    @Operation(summary = "Khách hàng xác nhận đã nhận được hàng (Chuyển trạng thái sang DELIVERED)")
+    public ResponseEntity<ApiResponse<OrderResponse>> confirmDelivered(
+            @PathVariable String orderCode,
+            @AuthenticationPrincipal Object principal) {
+
+        if (!(principal instanceof Long userId)) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+
+        OrderResponse response = orderService.confirmDeliveredByUser(orderCode, userId);
+        return ResponseEntity.ok(ApiResponse.success("Xác nhận đã nhận hàng thành công!", response));
     }
 }

@@ -253,6 +253,62 @@ public class OrderServiceImpl implements OrderService {
         return expiredOrders.size();
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public List<OrderResponse> getAllOrdersForAdmin(OrderStatus status) {
+        List<Order> orders = (status != null)
+                ? orderRepository.findByStatusOrderByCreatedAtDesc(status)
+                : orderRepository.findAllByOrderByCreatedAtDesc();
+
+        return orders.stream()
+                .map(this::mapToOrderResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional
+    public OrderResponse updateOrderStatusByAdmin(String orderCode, OrderStatus newStatus) {
+        Order order = orderRepository.findByOrderCode(orderCode)
+                .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
+
+        OrderStatus oldStatus = order.getStatus();
+        log.info("Admin updating order [{}] status: {} -> {}", orderCode, oldStatus, newStatus);
+
+        // Neu Admin chuyen sang CANCELLED ma don chua tung bi huy -> Hoan lai ton kho
+        if (newStatus == OrderStatus.CANCELLED && oldStatus != OrderStatus.CANCELLED) {
+            order.getItems().forEach(item -> {
+                preHeatService.restock(order.getCampaignId(), item.getProductId(), order.getUserId(), item.getQuantity());
+                productRepository.findByCampaignIdAndProductId(order.getCampaignId(), item.getProductId())
+                        .ifPresent(p -> productRepository.restockDb(p.getId(), item.getQuantity()));
+            });
+            log.info("Admin cancelled order [{}] and restocked inventory", orderCode);
+        }
+
+        order.setStatus(newStatus);
+        Order updatedOrder = orderRepository.save(order);
+        return mapToOrderResponse(updatedOrder);
+    }
+
+    @Override
+    @Transactional
+    public OrderResponse confirmDeliveredByUser(String orderCode, Long userId) {
+        Order order = orderRepository.findByOrderCode(orderCode)
+                .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
+
+        if (!order.getUserId().equals(userId)) {
+            throw new AppException(ErrorCode.FORBIDDEN);
+        }
+
+        if (order.getStatus() != OrderStatus.SHIPPING && order.getStatus() != OrderStatus.PAID) {
+            throw new AppException(ErrorCode.ORDER_CANNOT_BE_CONFIRMED);
+        }
+
+        order.setStatus(OrderStatus.DELIVERED);
+        Order updatedOrder = orderRepository.save(order);
+        log.info("User [{}] confirmed delivery for order [{}]", userId, orderCode);
+        return mapToOrderResponse(updatedOrder);
+    }
+
     private OrderResponse mapToOrderResponse(Order order) {
         List<OrderItemResponse> itemResponses = order.getItems().stream()
                 .map(item -> OrderItemResponse.builder()

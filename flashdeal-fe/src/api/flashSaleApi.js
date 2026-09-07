@@ -16,5 +16,14 @@ export const flashSaleApi = {
   getOrderByCode: (orderCode) => axiosClient.get(`/flash-sales/orders/${orderCode}`),
   cancelOrder: (orderCode) => axiosClient.put(`/flash-sales/orders/${orderCode}/cancel`),
   payOrder: (orderCode) => axiosClient.put(`/flash-sales/orders/${orderCode}/pay`),
+  confirmDelivered: (orderCode) => axiosClient.put(`/flash-sales/orders/${orderCode}/confirm-delivered`),
   triggerCancelExpired: () => axiosClient.post('/flash-sales/orders/cancel-expired'),
+  getAllOrdersForAdmin: (status) =>
+    axiosClient.get('/flash-sales/orders/admin/all', {
+      params: status && status !== 'ALL' ? { status } : {},
+    }),
+  updateOrderStatusByAdmin: (orderCode, status) =>
+    axiosClient.put(`/flash-sales/orders/admin/${orderCode}/status`, null, {
+      params: { status },
+    }),
 };

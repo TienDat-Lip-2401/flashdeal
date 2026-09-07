@@ -1,5 +1,6 @@
 package flashdeal_api.order.service;
 
+import flashdeal_api.order.entity.OrderStatus;
 import flashdeal_api.order.model.dto.FlashSaleOrderRequest;
 import flashdeal_api.order.model.dto.OrderResponse;
 
@@ -18,4 +19,10 @@ public interface OrderService {
     OrderResponse payOrder(String orderCode, Long userId);
 
     int cancelExpiredOrders();
+
+    List<OrderResponse> getAllOrdersForAdmin(OrderStatus status);
+
+    OrderResponse updateOrderStatusByAdmin(String orderCode, OrderStatus newStatus);
+
+    OrderResponse confirmDeliveredByUser(String orderCode, Long userId);
 }
