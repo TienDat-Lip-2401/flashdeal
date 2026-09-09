@@ -5,48 +5,83 @@ spring:
   application:
     name: api-gateway
 
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+
   cloud:
     gateway:
       routes:
-        # Route cho Product Service (/api/products/** & /api/categories/**)
+        # Route cho Product Service (/api/products/** & /api/categories/**) - 120 req/min
         - id: product-service-route
           uri: ${PRODUCT_SERVICE_URL:http://localhost:8082}
           predicates:
             - Path=/api/products/**, /api/categories/**
           filters:
             - StripPrefix=1
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 3
+                redis-rate-limiter.burstCapacity: 120
+                redis-rate-limiter.requestedTokens: 1
+                key-resolver: "#{@ipKeyResolver}"
 
-        # Route cho Auth Service (/api/auth/**)
+        # Route cho Auth Service (/api/auth/**) - 20 req/min
         - id: auth-service-route
           uri: ${AUTH_SERVICE_URL:http://localhost:8081}
           predicates:
             - Path=/api/auth/**
           filters:
             - StripPrefix=1
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 1
+                redis-rate-limiter.burstCapacity: 20
+                redis-rate-limiter.requestedTokens: 1
+                key-resolver: "#{@ipKeyResolver}"
 
-        # Route cho FlashSale & Order Engine Service (/api/flash-sales/**)
+        # Route cho FlashSale & Order Engine Service (/api/flash-sales/**) - 30 req/min
         - id: flashsale-order-route
           uri: ${ORDER_SERVICE_URL:http://localhost:8083}
           predicates:
             - Path=/api/flash-sales/**
           filters:
             - StripPrefix=1
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 1
+                redis-rate-limiter.burstCapacity: 30
+                redis-rate-limiter.requestedTokens: 1
+                key-resolver: "#{@ipKeyResolver}"
 
-        # Route cho Notification & Email Service (/api/notifications/**)
+        # Route cho Notification & Email Service (/api/notifications/**) - 30 req/min
         - id: notification-service-route
           uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8086}
           predicates:
             - Path=/api/notifications/**
           filters:
             - StripPrefix=1
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 1
+                redis-rate-limiter.burstCapacity: 30
+                redis-rate-limiter.requestedTokens: 1
+                key-resolver: "#{@ipKeyResolver}"
 
-        # Route cho Payment Service (/api/payments/**)
+        # Route cho Payment Service (/api/payments/**) - 20 req/min
         - id: payment-service-route
           uri: ${PAYMENT_SERVICE_URL:http://localhost:8084}
           predicates:
             - Path=/api/payments/**
           filters:
             - StripPrefix=1
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 1
+                redis-rate-limiter.burstCapacity: 20
+                redis-rate-limiter.requestedTokens: 1
+                key-resolver: "#{@ipKeyResolver}"
 
         # Route cho Swagger Docs cua Product Service
         - id: product-docs-route

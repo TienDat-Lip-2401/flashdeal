@@ -274,12 +274,21 @@ services:
       ORDER_SERVICE_URL: http://flashsale-order-service:8083
       NOTIFICATION_SERVICE_URL: http://notification-service:8086
       PAYMENT_SERVICE_URL: http://payment-service:8084
+      SPRING_DATA_REDIS_HOST: flashdeal-redis
+      SPRING_DATA_REDIS_PORT: 6379
     depends_on:
-      - product-service
-      - auth-service
-      - flashsale-order-service
-      - notification-service
-      - payment-service
+      flashdeal-redis:
+        condition: service_healthy
+      product-service:
+        condition: service_started
+      auth-service:
+        condition: service_started
+      flashsale-order-service:
+        condition: service_started
+      notification-service:
+        condition: service_started
+      payment-service:
+        condition: service_started
     networks:
       - flashdeal-network
 
