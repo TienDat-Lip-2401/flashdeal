@@ -32,6 +32,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final VNPayConfig vnpayConfig;
     private final PaymentRepository paymentRepository;
     private final PaymentEventProducer paymentEventProducer;
+    private final PaymentIdempotencyService paymentIdempotencyService;
 
     private static final DateTimeFormatter VNP_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
     private static final ZoneId VN_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
@@ -174,70 +175,112 @@ public class PaymentServiceImpl implements PaymentService {
             amount = new BigDecimal(amountStr).divide(BigDecimal.valueOf(100));
         }
 
-        // 2. Tìm bản ghi Payment
-        Payment payment = paymentRepository.findByOrderCode(orderCode)
-                .orElseGet(() -> {
-                    String code = "PAY-" + System.currentTimeMillis();
-                    return Payment.builder()
-                            .paymentCode(code)
-                            .orderCode(orderCode)
-                            .userId(1L)
-                            .amount(BigDecimal.ZERO)
-                            .createdAt(LocalDateTime.now())
-                            .build();
-                });
-
-        // 3. Kiểm tra mã phản hồi (00 = Giao dịch thành công)
-        if ("00".equals(responseCode)) {
-            payment.setStatus(PaymentStatus.SUCCESS);
-            payment.setVnpTransactionNo(transactionNo);
-            payment.setBankCode(bankCode);
-            payment.setPaidAt(LocalDateTime.now());
-            if (amount.compareTo(BigDecimal.ZERO) > 0) {
-                payment.setAmount(amount);
-            }
-            paymentRepository.save(payment);
-
-            log.info("[VNPay Callback] Giao dịch thành công cho đơn hàng: [{}]. Bắn sự kiện sang Kafka...", orderCode);
-
-            // 4. Bắn sự kiện sang Apache Kafka để order-service và notification-service cùng tiêu thụ
-            PaymentSuccessfulEvent event = PaymentSuccessfulEvent.builder()
-                    .paymentCode(payment.getPaymentCode())
-                    .orderCode(payment.getOrderCode())
-                    .userId(payment.getUserId())
-                    .userEmail(payment.getUserEmail())
-                    .amount(payment.getAmount())
-                    .paymentMethod("VNPAY")
-                    .vnpTransactionNo(transactionNo)
-                    .bankCode(bankCode)
-                    .paidAt(payment.getPaidAt())
-                    .build();
-
-            paymentEventProducer.publishPaymentSuccessfulEvent(event);
-
+        // Lớp 1 (DB Guard): Kiểm tra trong DB nếu đơn đã thanh toán thành công trước đó (chống F5 Reload trang)
+        Optional<Payment> existingPaymentOpt = paymentRepository.findByOrderCode(orderCode);
+        if (existingPaymentOpt.isPresent() && existingPaymentOpt.get().getStatus() == PaymentStatus.SUCCESS) {
+            Payment p = existingPaymentOpt.get();
+            log.info("[VNPay Callback] Đơn hàng [{}] đã thanh toán thành công trước đó (Idempotent DB skipped, không bắn lại Kafka).", orderCode);
             return PaymentCallbackResponse.builder()
                     .responseCode("00")
-                    .message("Thanh toán đơn hàng VNPAY thành công!")
+                    .message("Thanh toán đơn hàng VNPAY thành công (đã xử lý trước đó)!")
                     .orderCode(orderCode)
-                    .transactionNo(transactionNo)
-                    .bankCode(bankCode)
-                    .amount(payment.getAmount())
+                    .transactionNo(p.getVnpTransactionNo())
+                    .bankCode(p.getBankCode())
+                    .amount(p.getAmount())
                     .success(true)
                     .build();
-        } else {
-            payment.setStatus(PaymentStatus.FAILED);
-            paymentRepository.save(payment);
-            log.warn("[VNPay Callback] Giao dịch thất bại với mã lỗi: {}", responseCode);
+        }
 
+        // Lớp 2 (Redis Guard): Khóa nguyên tử SETNX 30s phòng ngừa Race Condition giữa Return URL & IPN Webhook
+        String redisKey = "idempotency:payment:" + orderCode;
+        boolean acquired = paymentIdempotencyService.tryAcquire(redisKey, 30L);
+        if (!acquired) {
+            log.warn("[VNPay Callback] Đang có tiến trình khác xử lý thanh toán cho đơn hàng [{}] (Redis lock active).", orderCode);
+            Payment p = paymentRepository.findByOrderCode(orderCode).orElse(null);
             return PaymentCallbackResponse.builder()
-                    .responseCode(responseCode)
-                    .message("Giao dịch VNPAY thất bại hoặc bị hủy (Mã lỗi: " + responseCode + ")")
+                    .responseCode("00")
+                    .message("Giao dịch thanh toán đang được xử lý hoặc đã hoàn tất!")
                     .orderCode(orderCode)
-                    .transactionNo(transactionNo)
-                    .bankCode(bankCode)
-                    .amount(amount)
-                    .success(false)
+                    .transactionNo(p != null ? p.getVnpTransactionNo() : transactionNo)
+                    .bankCode(p != null ? p.getBankCode() : bankCode)
+                    .amount(p != null ? p.getAmount() : amount)
+                    .success(true)
                     .build();
+        }
+
+        try {
+            // 2. Tìm hoặc tạo bản ghi Payment
+            Payment payment = existingPaymentOpt.orElseGet(() -> {
+                String code = "PAY-" + System.currentTimeMillis();
+                return Payment.builder()
+                        .paymentCode(code)
+                        .orderCode(orderCode)
+                        .userId(1L)
+                        .amount(BigDecimal.ZERO)
+                        .createdAt(LocalDateTime.now())
+                        .build();
+            });
+
+            // 3. Kiểm tra mã phản hồi (00 = Giao dịch thành công)
+            if ("00".equals(responseCode)) {
+                payment.setStatus(PaymentStatus.SUCCESS);
+                payment.setVnpTransactionNo(transactionNo);
+                payment.setBankCode(bankCode);
+                payment.setPaidAt(LocalDateTime.now());
+                if (amount.compareTo(BigDecimal.ZERO) > 0) {
+                    payment.setAmount(amount);
+                }
+                paymentRepository.save(payment);
+
+                log.info("[VNPay Callback] Giao dịch thành công cho đơn hàng: [{}]. Bắn sự kiện sang Kafka...", orderCode);
+
+                // 4. Bắn sự kiện sang Apache Kafka để order-service và notification-service cùng tiêu thụ
+                PaymentSuccessfulEvent event = PaymentSuccessfulEvent.builder()
+                        .paymentCode(payment.getPaymentCode())
+                        .orderCode(payment.getOrderCode())
+                        .userId(payment.getUserId())
+                        .userEmail(payment.getUserEmail())
+                        .amount(payment.getAmount())
+                        .paymentMethod("VNPAY")
+                        .vnpTransactionNo(transactionNo)
+                        .bankCode(bankCode)
+                        .paidAt(payment.getPaidAt())
+                        .build();
+
+                paymentEventProducer.publishPaymentSuccessfulEvent(event);
+
+                // 5. Ghi nhận trạng thái COMPLETED trong Redis (lưu 120s chống spam/reload)
+                paymentIdempotencyService.markCompleted(redisKey, 120L);
+
+                return PaymentCallbackResponse.builder()
+                        .responseCode("00")
+                        .message("Thanh toán đơn hàng VNPAY thành công!")
+                        .orderCode(orderCode)
+                        .transactionNo(transactionNo)
+                        .bankCode(bankCode)
+                        .amount(payment.getAmount())
+                        .success(true)
+                        .build();
+            } else {
+                payment.setStatus(PaymentStatus.FAILED);
+                paymentRepository.save(payment);
+                paymentIdempotencyService.release(redisKey);
+                log.warn("[VNPay Callback] Giao dịch thất bại với mã lỗi: {}", responseCode);
+
+                return PaymentCallbackResponse.builder()
+                        .responseCode(responseCode)
+                        .message("Giao dịch VNPAY thất bại hoặc bị hủy (Mã lỗi: " + responseCode + ")")
+                        .orderCode(orderCode)
+                        .transactionNo(transactionNo)
+                        .bankCode(bankCode)
+                        .amount(amount)
+                        .success(false)
+                        .build();
+            }
+        } catch (Exception ex) {
+            paymentIdempotencyService.release(redisKey);
+            log.error("[VNPay Callback] Lỗi ngoại lệ khi xử lý thanh toán cho đơn [{}]: {}", orderCode, ex.getMessage(), ex);
+            throw ex;
         }
     }
 
@@ -246,54 +289,95 @@ public class PaymentServiceImpl implements PaymentService {
     public PaymentCallbackResponse simulateSuccessPayment(String orderCode, String email) {
         log.info("[VNPay Sandbox] Giả lập thanh toán thành công cho đơn hàng: [{}]", orderCode);
 
-        Payment payment = paymentRepository.findByOrderCode(orderCode)
-                .orElseGet(() -> {
-                    String code = "PAY-" + System.currentTimeMillis() + "-" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
-                    return Payment.builder()
-                            .paymentCode(code)
-                            .orderCode(orderCode)
-                            .userId(1L)
-                            .userEmail(email)
-                            .amount(BigDecimal.valueOf(100000))
-                            .paymentMethod("VNPAY")
-                            .status(PaymentStatus.PENDING)
-                            .createdAt(LocalDateTime.now())
-                            .build();
-                });
-
-        if (email != null && !email.isBlank()) {
-            payment.setUserEmail(email);
+        // Lớp 1 (DB Guard): Đơn đã thanh toán trước đó thì bỏ qua, không bắn lại Kafka
+        Optional<Payment> existingOpt = paymentRepository.findByOrderCode(orderCode);
+        if (existingOpt.isPresent() && existingOpt.get().getStatus() == PaymentStatus.SUCCESS) {
+            Payment p = existingOpt.get();
+            log.info("[VNPay Sandbox] Đơn hàng [{}] đã thanh toán giả lập thành công trước đó (Idempotent DB skipped, không phát lại Kafka).", orderCode);
+            return PaymentCallbackResponse.builder()
+                    .responseCode("00")
+                    .message("Giả lập thanh toán VNPAY thành công (đã xử lý trước đó)!")
+                    .orderCode(orderCode)
+                    .transactionNo(p.getVnpTransactionNo())
+                    .bankCode(p.getBankCode())
+                    .amount(p.getAmount())
+                    .success(true)
+                    .build();
         }
 
-        payment.setStatus(PaymentStatus.SUCCESS);
-        payment.setVnpTransactionNo("SIM-" + System.currentTimeMillis());
-        payment.setBankCode("NCB");
-        payment.setPaidAt(LocalDateTime.now());
-        paymentRepository.save(payment);
+        // Lớp 2 (Redis Guard): Khóa nguyên tử 30s phòng click đúp
+        String redisKey = "idempotency:payment:" + orderCode;
+        boolean acquired = paymentIdempotencyService.tryAcquire(redisKey, 30L);
+        if (!acquired) {
+            log.warn("[VNPay Sandbox] Giao dịch giả lập cho đơn hàng [{}] đang được xử lý song song (Redis lock active).", orderCode);
+            Payment p = paymentRepository.findByOrderCode(orderCode).orElse(null);
+            return PaymentCallbackResponse.builder()
+                    .responseCode("00")
+                    .message("Giao dịch đang được xử lý hoặc đã hoàn tất!")
+                    .orderCode(orderCode)
+                    .transactionNo(p != null ? p.getVnpTransactionNo() : "")
+                    .bankCode("NCB")
+                    .amount(p != null ? p.getAmount() : BigDecimal.valueOf(100000))
+                    .success(true)
+                    .build();
+        }
 
-        // Bắn sự kiện sang Kafka
-        PaymentSuccessfulEvent event = PaymentSuccessfulEvent.builder()
-                .paymentCode(payment.getPaymentCode())
-                .orderCode(payment.getOrderCode())
-                .userId(payment.getUserId())
-                .userEmail(payment.getUserEmail())
-                .amount(payment.getAmount())
-                .paymentMethod("VNPAY")
-                .vnpTransactionNo(payment.getVnpTransactionNo())
-                .bankCode("NCB")
-                .paidAt(payment.getPaidAt())
-                .build();
+        try {
+            Payment payment = existingOpt.orElseGet(() -> {
+                String code = "PAY-" + System.currentTimeMillis() + "-" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
+                return Payment.builder()
+                        .paymentCode(code)
+                        .orderCode(orderCode)
+                        .userId(1L)
+                        .userEmail(email)
+                        .amount(BigDecimal.valueOf(100000))
+                        .paymentMethod("VNPAY")
+                        .status(PaymentStatus.PENDING)
+                        .createdAt(LocalDateTime.now())
+                        .build();
+            });
 
-        paymentEventProducer.publishPaymentSuccessfulEvent(event);
+            if (email != null && !email.isBlank()) {
+                payment.setUserEmail(email);
+            }
 
-        return PaymentCallbackResponse.builder()
-                .responseCode("00")
-                .message("Giả lập thanh toán VNPAY thành công!")
-                .orderCode(orderCode)
-                .transactionNo(payment.getVnpTransactionNo())
-                .bankCode("NCB")
-                .amount(payment.getAmount())
-                .success(true)
-                .build();
+            payment.setStatus(PaymentStatus.SUCCESS);
+            payment.setVnpTransactionNo("SIM-" + System.currentTimeMillis());
+            payment.setBankCode("NCB");
+            payment.setPaidAt(LocalDateTime.now());
+            paymentRepository.save(payment);
+
+            // Bắn sự kiện sang Kafka
+            PaymentSuccessfulEvent event = PaymentSuccessfulEvent.builder()
+                    .paymentCode(payment.getPaymentCode())
+                    .orderCode(payment.getOrderCode())
+                    .userId(payment.getUserId())
+                    .userEmail(payment.getUserEmail())
+                    .amount(payment.getAmount())
+                    .paymentMethod("VNPAY")
+                    .vnpTransactionNo(payment.getVnpTransactionNo())
+                    .bankCode("NCB")
+                    .paidAt(payment.getPaidAt())
+                    .build();
+
+            paymentEventProducer.publishPaymentSuccessfulEvent(event);
+
+            // Đánh dấu hoàn tất trên Redis (120s)
+            paymentIdempotencyService.markCompleted(redisKey, 120L);
+
+            return PaymentCallbackResponse.builder()
+                    .responseCode("00")
+                    .message("Giả lập thanh toán VNPAY thành công!")
+                    .orderCode(orderCode)
+                    .transactionNo(payment.getVnpTransactionNo())
+                    .bankCode("NCB")
+                    .amount(payment.getAmount())
+                    .success(true)
+                    .build();
+        } catch (Exception ex) {
+            paymentIdempotencyService.release(redisKey);
+            log.error("[VNPay Sandbox] Lỗi khi giả lập thanh toán cho đơn [{}]: {}", orderCode, ex.getMessage(), ex);
+            throw ex;
+        }
     }
 }

@@ -245,10 +245,14 @@ services:
       SPRING_DATASOURCE_USERNAME: flashdeal_user
       SPRING_DATASOURCE_PASSWORD: flashdeal_password
       SPRING_KAFKA_BOOTSTRAP_SERVERS: flashdeal-kafka:29092
+      SPRING_DATA_REDIS_HOST: flashdeal-redis
+      SPRING_DATA_REDIS_PORT: 6379
       VNP_TMN_CODE: 7CW0K93X
       VNP_HASH_SECRET: CGTQWUEKMFNKSAZNQWLLZNAAFKEYLREX
     depends_on:
       flashdeal-db:
+        condition: service_healthy
+      flashdeal-redis:
         condition: service_healthy
       flashdeal-kafka:
         condition: service_healthy

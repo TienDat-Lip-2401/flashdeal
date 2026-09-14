@@ -41,6 +41,22 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- Spring Data Redis & Commons Pool -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-pool2</artifactId>
+        </dependency>
+
+        <!-- Spring Boot AOP -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+        </dependency>
+
         <!-- Spring Kafka for Event Publishing & Consuming -->
         <dependency>
             <groupId>org.springframework.kafka</groupId>
