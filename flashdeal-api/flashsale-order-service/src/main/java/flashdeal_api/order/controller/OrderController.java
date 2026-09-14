@@ -1,5 +1,6 @@
 package flashdeal_api.order.controller;
 
+import flashdeal_api.order.annotation.Idempotent;
 import flashdeal_api.order.entity.OrderStatus;
 import flashdeal_api.order.exception.AppException;
 import flashdeal_api.order.exception.ErrorCode;
@@ -22,14 +23,15 @@ import java.util.List;
 @RestController
 @RequestMapping("/flash-sales/orders")
 @RequiredArgsConstructor
-@Tag(name = "Flash Sale Orders", description = "APIs Săn Deal Chịu Tải Cao (50.000 req/s) và Quản Lý Đơn Hàng")
+@Tag(name = "Flash Sale Orders", description = "APIs Săn Deal và Quản Lý Đơn Hàng")
 @SecurityRequirement(name = "BearerAuth")
 public class OrderController {
 
     private final OrderService orderService;
 
     @PostMapping
-    @Operation(summary = "SĂN DEAL FLASH SALE (Chịu tải cao 50.000 req/s, phản hồi < 5ms)")
+    @Idempotent(prefix = "flashsale_order", lockTtlSeconds = 30, completedTtlSeconds = 120)
+    @Operation(summary = "SĂN DEAL FLASH SALE")
     public ResponseEntity<ApiResponse<OrderResponse>> createFlashSaleOrder(
             @AuthenticationPrincipal Object principal,
             @Valid @RequestBody FlashSaleOrderRequest request) {

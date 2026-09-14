@@ -95,6 +95,19 @@ public class ProductController {
         return ResponseEntity.ok(response);
     }
 
+    // 3.1. LẤY CHI TIẾT SẢN PHẨM TỔNG HỢP (XỬ LÝ ĐA LUỒNG SONG SONG VỚI COMPLETABLEFUTURE)
+    @GetMapping("/{id}/detail-summary")
+    @Operation(summary = "Lấy thông tin chi tiết sản phẩm tổng hợp (Chạy song song CompletableFuture)")
+    public ResponseEntity<ApiResponse> getProductDetailSummary(@PathVariable("id") Long id) {
+        var result = productService.getProductDetailSummary(id);
+        ApiResponse response = ApiResponse.builder()
+                .code(200)
+                .data(objectMapper.valueToTree(result))
+                .message("Get product detail summary successfully")
+                .build();
+        return ResponseEntity.ok(response);
+    }
+
     // 4. LẤY CHI TIẾT SẢN PHẨM THEO SLUG
     @GetMapping("/slug/{slug}")
     @Operation(summary = "Lấy chi tiết sản phẩm theo Slug")

@@ -168,7 +168,7 @@ export default function App() {
                 <span>FLASHDEAL ENTERPRISE</span>
               </div>
               <p className="text-slate-400 text-xs leading-relaxed">
-                Nền tảng kiến trúc Microservices phân tán chịu tải cao (High Concurrency 50.000 req/s),
+                Nền tảng kiến trúc Microservices phân tán chịu tải cao (High Concurrency),
                 tối ưu hóa nguyên tử với Redis Lua Script và Apache Kafka.
               </p>
               <div className="text-[11px] text-slate-500 font-mono">

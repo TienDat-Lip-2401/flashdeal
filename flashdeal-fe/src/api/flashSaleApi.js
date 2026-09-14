@@ -11,7 +11,13 @@ export const flashSaleApi = {
   deleteCampaign: (id) => axiosClient.delete(`/flash-sales/campaigns/${id}`),
 
   // Order APIs
-  createOrder: (data) => axiosClient.post('/flash-sales/orders', data),
+  createOrder: (data, idempotencyKey) => {
+    const headers = {};
+    if (idempotencyKey) {
+      headers['Idempotency-Key'] = idempotencyKey;
+    }
+    return axiosClient.post('/flash-sales/orders', data, { headers });
+  },
   getMyOrders: () => axiosClient.get('/flash-sales/orders/my-orders'),
   getOrderByCode: (orderCode) => axiosClient.get(`/flash-sales/orders/${orderCode}`),
   cancelOrder: (orderCode) => axiosClient.put(`/flash-sales/orders/${orderCode}/cancel`),

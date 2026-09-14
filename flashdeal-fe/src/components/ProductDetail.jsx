@@ -214,7 +214,7 @@ export default function ProductDetail({ setLastResponse, showToast, activeUser }
                   className="w-full sm:flex-1 flex items-center justify-center gap-2 py-3.5 px-6 rounded-lg bg-red-700 hover:bg-red-800 text-white font-bold text-sm shadow-sm transition active:scale-98"
                 >
                   <Zap className="w-4 h-4 fill-white" />
-                  Săn Deal Flash Sale Siêu Tốc (50.000 req/s)
+                  Săn Deal Flash Sale Siêu Tốc
                 </button>
 
                 <button

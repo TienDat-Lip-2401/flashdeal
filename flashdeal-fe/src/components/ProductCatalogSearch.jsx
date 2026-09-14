@@ -193,7 +193,7 @@ export default function ProductCatalogSearch({ setLastResponse, showToast }) {
           </h1>
           <p className="text-slate-300 text-sm mt-2 leading-relaxed">
             Hệ sinh thái phân tán với tìm kiếm siêu tốc <strong>Redis Lexicographical (&lt; 2ms)</strong>,
-            bộ lọc động PostgreSQL và sàn <strong>Săn Deal Flash Sale 50.000 req/s</strong>.
+            bộ lọc động PostgreSQL và sàn <strong>Săn Deal Flash Sale Siêu Tốc</strong>.
           </p>
         </div>
 
@@ -370,7 +370,7 @@ export default function ProductCatalogSearch({ setLastResponse, showToast }) {
               <div className="inline-flex p-2 bg-red-600 text-white rounded-lg mb-2">
                 <Zap className="w-5 h-5 fill-white" />
               </div>
-              <h4 className="text-xs font-bold text-red-900">Sàn Flash Sale 50.000 req/s</h4>
+              <h4 className="text-xs font-bold text-red-900">Sàn Flash Sale Siêu Tốc</h4>
               <p className="text-[11px] text-red-700 mt-1 mb-3">
                 Săn deal giảm 50% với thuật toán Redis Lua Script Fast-Gate!
               </p>

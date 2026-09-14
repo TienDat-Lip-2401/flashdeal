@@ -20,6 +20,11 @@ public interface ProductRepository extends JpaRepository<Product, Long>, JpaSpec
     boolean existsBySlug(String slug);
     Page<Product> findByCategoryIdAndStatus(Long categoryId, ProductStatus status, Pageable pageable);
     Page<Product> findByStatus(ProductStatus status, Pageable pageable);
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"category"})
+    Optional<Product> findById(Long id);
+
+    @org.springframework.data.jpa.repository.EntityGraph(attributePaths = {"category"})
+    List<Product> findTop4ByCategoryIdAndIdNotAndStatus(Long categoryId, Long id, ProductStatus status);
 
     @Query("SELECT p.name FROM Product p WHERE p.status = 'ACTIVE'")
     List<String> findAllActiveProductNames();

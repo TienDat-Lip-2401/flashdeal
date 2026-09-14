@@ -17,4 +17,13 @@ public interface FlashSaleItemRepository extends JpaRepository<FlashSaleItem, Lo
     List<FlashSaleItem> findByFlashSaleId(Long flashSaleId);
     // 3. Tìm sản phẩm cụ thể trong đợt sale
     Optional<FlashSaleItem> findByFlashSaleIdAndProductId(Long flashSaleId, Long productId);
+
+    // 4. Tìm sản phẩm trong đợt Flash Sale đang ACTIVE tại thời điểm hiện tại
+    @org.springframework.data.jpa.repository.Query("SELECT fsi FROM FlashSaleItem fsi JOIN FETCH fsi.flashSale fs " +
+            "WHERE fsi.product.id = :productId " +
+            "AND fs.status = :status " +
+            "AND :now BETWEEN fs.startTime AND fs.endTime")
+    Optional<FlashSaleItem> findActiveFlashSaleItemByProductId(@org.springframework.data.repository.query.Param("productId") Long productId,
+                                                              @org.springframework.data.repository.query.Param("status") flashdeal_api.entity.FlashSaleStatus status,
+                                                              @org.springframework.data.repository.query.Param("now") java.time.LocalDateTime now);
 }

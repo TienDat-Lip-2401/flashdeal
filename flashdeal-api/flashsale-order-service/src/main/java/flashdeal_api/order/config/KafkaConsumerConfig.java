@@ -5,6 +5,7 @@ import flashdeal_api.order.model.event.OrderCreatedEvent;
 import flashdeal_api.order.model.event.PaymentSuccessfulEvent;
 import flashdeal_api.order.model.event.ProductEvent;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -13,7 +14,11 @@ import org.springframework.kafka.annotation.EnableKafka;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
+import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
+import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.kafka.support.serializer.JsonDeserializer;
+import org.springframework.util.backoff.FixedBackOff;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -39,6 +44,29 @@ public class KafkaConsumerConfig {
         return props;
     }
 
+    // 0. BỘ ĐIỀU PHỐI LỖI (ERROR HANDLER) & DEAD LETTER TOPIC (DLT) RECOVERER
+    @Bean
+    public DefaultErrorHandler kafkaDefaultErrorHandler(KafkaTemplate<String, Object> kafkaTemplate) {
+        // Tự động chuyển hướng message lỗi sang <topic>.DLT (cùng partition) khi hết lượt retry
+        DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(
+                kafkaTemplate,
+                (record, ex) -> new TopicPartition(record.topic() + ".DLT", record.partition())
+        );
+
+        // Thử lại 3 lần, mỗi lần cách nhau 2.000ms (2 giây)
+        FixedBackOff backOff = new FixedBackOff(2000L, 3L);
+
+        DefaultErrorHandler errorHandler = new DefaultErrorHandler(recoverer, backOff);
+
+        // Không retry các lỗi giải mã dữ liệu (fatal Deserialization / Json parsing)
+        errorHandler.addNotRetryableExceptions(
+                org.apache.kafka.common.errors.SerializationException.class,
+                com.fasterxml.jackson.core.JsonParseException.class
+        );
+
+        return errorHandler;
+    }
+
     // 1. Container Factory cho OrderCreatedEvent (Săn deal Flash Sale thành công -> lưu DB)
     @Bean
     public ConsumerFactory<String, OrderCreatedEvent> orderCreatedConsumerFactory(ObjectMapper objectMapper) {
@@ -55,10 +83,12 @@ public class KafkaConsumerConfig {
 
     @Bean
     public ConcurrentKafkaListenerContainerFactory<String, OrderCreatedEvent> orderCreatedKafkaListenerContainerFactory(
-            ConsumerFactory<String, OrderCreatedEvent> orderCreatedConsumerFactory) {
+            ConsumerFactory<String, OrderCreatedEvent> orderCreatedConsumerFactory,
+            DefaultErrorHandler kafkaDefaultErrorHandler) {
         ConcurrentKafkaListenerContainerFactory<String, OrderCreatedEvent> factory = new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(orderCreatedConsumerFactory);
         factory.setConcurrency(4);
+        factory.setCommonErrorHandler(kafkaDefaultErrorHandler);
         return factory;
     }
 
@@ -78,10 +108,12 @@ public class KafkaConsumerConfig {
 
     @Bean
     public ConcurrentKafkaListenerContainerFactory<String, PaymentSuccessfulEvent> paymentSuccessfulKafkaListenerContainerFactory(
-            ConsumerFactory<String, PaymentSuccessfulEvent> paymentSuccessfulConsumerFactory) {
+            ConsumerFactory<String, PaymentSuccessfulEvent> paymentSuccessfulConsumerFactory,
+            DefaultErrorHandler kafkaDefaultErrorHandler) {
         ConcurrentKafkaListenerContainerFactory<String, PaymentSuccessfulEvent> factory = new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(paymentSuccessfulConsumerFactory);
         factory.setConcurrency(2);
+        factory.setCommonErrorHandler(kafkaDefaultErrorHandler);
         return factory;
     }
 

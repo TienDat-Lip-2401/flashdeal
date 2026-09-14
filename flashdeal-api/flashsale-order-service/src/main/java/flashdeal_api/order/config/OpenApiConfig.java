@@ -19,7 +19,7 @@ public class OpenApiConfig {
         return new OpenAPI()
                 .info(new Info()
                         .title("FlashDeal - FlashSale & Order Engine API")
-                        .description("Microservice xử lý Săn Sale chịu tải cao (50.000 req/s) với Redis Lua Script Fast-Gate và Kafka Order Pipeline.")
+                        .description("Microservice xử lý Săn Sale với Redis Lua Script Fast-Gate và Kafka Order Pipeline.")
                         .version("1.0.0")
                         .contact(new Contact()
                                 .name("FlashDeal Engineering Team")

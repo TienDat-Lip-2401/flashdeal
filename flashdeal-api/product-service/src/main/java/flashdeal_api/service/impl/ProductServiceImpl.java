@@ -6,16 +6,19 @@ import flashdeal_api.exception.AppException;
 import flashdeal_api.exception.ErrorCode;
 import flashdeal_api.model.PageResponse;
 import flashdeal_api.model.category.CategoryResponse;
+import flashdeal_api.model.product.ProductDetailSummaryResponse;
 import flashdeal_api.model.product.ProductFilterRequest;
 import flashdeal_api.model.product.ProductRequest;
 import flashdeal_api.model.product.ProductResponse;
 import flashdeal_api.repository.CategoryRepository;
+import flashdeal_api.repository.FlashSaleItemRepository;
 import flashdeal_api.repository.ProductRepository;
 import flashdeal_api.repository.specification.ProductSpecification;
 import flashdeal_api.service.ProductService;
 import flashdeal_api.service.RedisSearchService;
 import flashdeal_api.util.SlugUtil;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
@@ -26,15 +29,23 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ProductServiceImpl implements ProductService {
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
+    private final FlashSaleItemRepository flashSaleItemRepository;
     private final RedisSearchService redisSearchService;
     private final flashdeal_api.producer.ProductEventProducer productEventProducer;
+    private final Executor productTaskExecutor;
 
     @Override
     @CacheEvict(value = {"products", "product_filters"}, allEntries = true)
@@ -88,6 +99,92 @@ public class ProductServiceImpl implements ProductService {
         Product product = productRepository.findBySlug(slug)
                 .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_FOUND));
         return buildProductResponse(product);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ProductDetailSummaryResponse getProductDetailSummary(Long id) {
+        long startTime = System.currentTimeMillis();
+        Set<String> threadNames = ConcurrentHashMap.newKeySet();
+
+        // 1. Task 1: Truy vấn thông tin sản phẩm cơ bản (Worker Thread 1)
+        CompletableFuture<Product> productFuture = CompletableFuture.supplyAsync(() -> {
+            String threadName = Thread.currentThread().getName();
+            threadNames.add(threadName);
+            log.info("[Multithreading] Task 1 (Product Base) running on thread: {}", threadName);
+            return productRepository.findById(id)
+                    .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_FOUND));
+        }, productTaskExecutor);
+
+        // 2. Task 2: Truy vấn thông tin Flash Sale (Worker Thread 2)
+        CompletableFuture<ProductDetailSummaryResponse.FlashSaleSummary> flashSaleFuture = CompletableFuture
+                .<ProductDetailSummaryResponse.FlashSaleSummary>supplyAsync(() -> {
+                    String threadName = Thread.currentThread().getName();
+                    threadNames.add(threadName);
+                    log.info("[Multithreading] Task 2 (Flash Sale Info) running on thread: {}", threadName);
+                    LocalDateTime now = LocalDateTime.now();
+                    return flashSaleItemRepository.findActiveFlashSaleItemByProductId(id, flashdeal_api.entity.FlashSaleStatus.HAPPENING, now)
+                            .map(item -> {
+                                var fs = item.getFlashSale();
+                                int available = Math.max(0, item.getSaleQuantity() - (item.getSoldQuantity() != null ? item.getSoldQuantity() : 0));
+                                return ProductDetailSummaryResponse.FlashSaleSummary.builder()
+                                        .flashSaleId(fs.getId())
+                                        .campaignTitle(fs.getTitle())
+                                        .flashSalePrice(item.getFlashSalePrice())
+                                        .saleQuantity(item.getSaleQuantity())
+                                        .soldQuantity(item.getSoldQuantity())
+                                        .availableStock(available)
+                                        .userLimit(item.getUserLimit())
+                                        .startTime(fs.getStartTime())
+                                        .endTime(fs.getEndTime())
+                                        .status(fs.getStatus().name())
+                                        .build();
+                            }).orElse(null);
+                }, productTaskExecutor).exceptionally(ex -> {
+                    log.warn("[Multithreading] Task 2 (Flash Sale Info) fallback to null. Error: {}", ex.getMessage());
+                    return null;
+                });
+
+        // 3. Task 3: Truy vấn Top 4 sản phẩm liên quan cùng danh mục (Worker Thread 3)
+        CompletableFuture<List<ProductResponse>> relatedFuture = productFuture.thenApplyAsync(product -> {
+            String threadName = Thread.currentThread().getName();
+            threadNames.add(threadName);
+            log.info("[Multithreading] Task 3 (Related Products) running on thread: {}", threadName);
+            if (product.getCategory() == null) {
+                return Collections.<ProductResponse>emptyList();
+            }
+            List<Product> related = productRepository.findTop4ByCategoryIdAndIdNotAndStatus(
+                    product.getCategory().getId(),
+                    id,
+                    flashdeal_api.entity.ProductStatus.ACTIVE
+            );
+            return related.stream().map(this::buildProductResponse).collect(Collectors.toList());
+        }, productTaskExecutor).exceptionally(ex -> {
+            log.warn("[Multithreading] Task 3 (Related Products) fallback to empty list. Error: {}", ex.getMessage());
+            return Collections.emptyList();
+        });
+
+        // Chờ cả 3 luồng hoàn thành
+        CompletableFuture.allOf(productFuture, flashSaleFuture, relatedFuture).join();
+
+        Product product = productFuture.join();
+        ProductDetailSummaryResponse.FlashSaleSummary flashSaleSummary = flashSaleFuture.join();
+        List<ProductResponse> relatedProducts = relatedFuture.join();
+
+        long executionDuration = System.currentTimeMillis() - startTime;
+        List<String> executedList = new ArrayList<>(threadNames);
+        Collections.sort(executedList);
+
+        log.info("[Multithreading] Finished ProductDetailSummary for productId={} in {} ms on threads: {}",
+                id, executionDuration, executedList);
+
+        return ProductDetailSummaryResponse.builder()
+                .product(buildProductResponse(product))
+                .flashSale(flashSaleSummary)
+                .relatedProducts(relatedProducts)
+                .executionTimeMs(executionDuration)
+                .executedThreads(executedList)
+                .build();
     }
 
     @Override

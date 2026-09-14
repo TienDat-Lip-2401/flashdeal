@@ -225,7 +225,10 @@ export default function FlashSaleHub({ setLastResponse, showToast, onSelectProdu
         phone: activeUser.phone || '0988668899',
         email: activeUser.email,
       };
-      const res = await flashSaleApi.createOrder(payload);
+      const idempotencyKey = (typeof crypto !== 'undefined' && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : `fs-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      const res = await flashSaleApi.createOrder(payload, idempotencyKey);
       const elapsed = Math.round(performance.now() - startTime);
 
       setLastResponse(res);
@@ -245,6 +248,8 @@ export default function FlashSaleHub({ setLastResponse, showToast, onSelectProdu
         showToast(`❌ HẾT HÀNG FLASH SALE! (Redis phản hồi trong ${elapsed}ms)`, 'error');
       } else if (err.code === 3005) {
         showToast(`⚠️ Bạn đã săn sản phẩm này rồi! Mỗi tài khoản chỉ được mua 1 lần.`, 'warning');
+      } else if (err.code === 1090 || err.status === 409) {
+        showToast(`⏳ ${err.message || 'Yêu cầu của bạn đang được xử lý hoặc đã hoàn tất. Vui lòng không thao tác lặp lại!'}`, 'warning');
       } else {
         showToast(`Lỗi [Code ${err.code || 500}]: ${err.message}`, 'error');
       }
@@ -315,7 +320,7 @@ export default function FlashSaleHub({ setLastResponse, showToast, onSelectProdu
               Sàn Săn Deal Tốc Độ Cao
             </div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-              Flash Sale High-Concurrency Engine (50.000 req/s)
+              Flash Sale High-Concurrency Engine
             </h1>
             <p className="text-slate-300 text-sm mt-2 max-w-2xl leading-relaxed">
               Trải nghiệm cơ chế đặt hàng nguyên tử với <strong>Redis Lua Script Fast-Gate (&lt; 1.5ms)</strong>,

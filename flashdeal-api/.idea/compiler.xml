@@ -9,6 +9,7 @@
         <module name="api-gateway" />
         <module name="product-service" />
         <module name="auth-service" />
+        <module name="payment-service" />
         <module name="notification-service" />
         <module name="flashsale-order-service" />
       </profile>
@@ -24,6 +25,7 @@
       <module name="flashdeal-api" options="" />
       <module name="flashsale-order-service" options="-parameters" />
       <module name="notification-service" options="-parameters" />
+      <module name="payment-service" options="-parameters" />
       <module name="product-service" options="-parameters" />
     </option>
   </component>

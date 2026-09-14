@@ -9,7 +9,7 @@ export default function TopHeader() {
         <div className="hidden md:flex items-center gap-6">
           <span className="flex items-center gap-1.5 text-slate-400">
             <ShieldCheck className="w-3.5 h-3.5 text-blue-400" />
-            Nền Tảng Thương Mại Điện Tử Chịu Tải Cao (50.000 req/s)
+            Nền Tảng Thương Mại Điện Tử Chịu Tải Cao
           </span>
           <span className="text-slate-700">|</span>
           <a

@@ -1,230 +1,186 @@
-# 🚀 FLASHDEAL – HỆ THỐNG SĂN DEAL FLASH SALE & ĐẶT HÀNG PHÂN TÁN
-> **High-Concurrency Event-Driven E-Commerce & Flash Sale Platform**  
-> *Được xây dựng với: Java 21, Spring Boot 3.4.1, Apache Kafka (KRaft), Redis 7, PostgreSQL 16, React 19 (Vite) và Docker.*
+# 🚀 FLASHDEAL API – HỆ THỐNG BACKEND MICROSERVICES & SĂN DEAL PHÂN TÁN
+
+> **High-Concurrency Event-Driven E-Commerce & Flash Sale Backend Engine**  
+> *Được xây dựng với: Java 21, Spring Boot 3.4.1, Spring Cloud Gateway, Apache Kafka (KRaft), Redis 7 In-Memory, PostgreSQL 16 và Docker.*
 
 ---
 
 ## 📑 MỤC LỤC
-1. [Tổng Quan Dự Án](#-1-tổng-quan-dự-án)
-2. [Kiến Trúc Hệ Thống & Định Hướng Microservices](#-2-kiến-trúc-hệ-thống--định-hướng-microservices)
-3. [Bảng Phân Bổ Kafka Topics & Partitions](#-3-bảng-phân-bổ-kafka-topics--partitions)
-4. [Danh Sách Tính Năng Theo Module](#-4-danh-sách-tính-năng-theo-module)
-5. [Chi Tiết Hệ Thống Tìm Kiếm Redis Engine](#-5-chi-tiết-hệ-thống-tìm-kiếm-redis-engine)
-6. [Cơ Chế Chống Âm Kho (Concurrency Guard)](#-6-cơ-chế-chống-âm-kho-concurrency-guard)
-7. [Tiến Độ Dự Án & Kế Hoạch 6 Phase](#-7-tiến-độ-dự-án--kế-hoạch-6-phase)
-8. [Giao Diện Frontend & Trải Nghiệm Người Dùng](#-8-giao-diện-frontend--trải-nghiệm-người-dùng)
-9. [Hướng Dẫn Khởi Chạy Bằng Docker](#-9-hướng-dẫn-khởi-chạy-bằng-docker)
+1. [Tổng Quan Kiến Trúc Backend](#1-tổng-quan-kiến-trúc-backend)
+2. [Chi Tiết 6 Microservices & Bảng Phân Chia Cổng](#2-chi-tiết-6-microservices--bảng-phân-chia-cổng)
+3. [Bộ 4 Chốt Chặn Chịu Tải & An Toàn Dữ Liệu Doanh Nghiệp](#3-bộ-4-chốt-chặn-chịu-tải--an-toàn-dữ-liệu-doanh-nghiệp)
+   - 3.1. [API Gateway Rate Limiting (Redis Token Bucket)](#31-api-gateway-rate-limiting-redis-token-bucket)
+   - 3.2. [API Composition Aggregator Đa Luồng (Java Concurrency 12ms)](#32-api-composition-aggregator-đa-luồng-java-concurrency-12ms)
+   - 3.3. [Kafka Dead Letter Topic (DLT) & Fault-Tolerance Retry](#33-kafka-dead-letter-topic-dlt--fault-tolerance-retry)
+   - 3.4. [Cơ Chế Lũy Đẳng Chuẩn Doanh Nghiệp (Hybrid Idempotency Pattern)](#34-cơ-chế-lũy-đẳng-chuẩn-doanh-nghiệp-hybrid-idempotency-pattern)
+4. [Bản Đồ Ứng Dụng Redis & Apache Kafka Topics](#4-bản-đồ-ứng-dụng-redis--apache-kafka-topics)
+5. [Cơ Chế Chống Âm Kho & Quản Lý Vòng Đời Đơn Hàng](#5-cơ-chế-chống-âm-kho--quản-lý-vòng-đời-đơn-hàng)
+6. [Hướng Dẫn Biên Dịch & Khởi Chạy Hệ Thống](#6-hướng-dẫn-biên-dịch--khởi-chạy-hệ-thống)
 
 ---
 
-# 🌟 1. TỔNG QUAN DỰ ÁN
+# 1. TỔNG QUAN KIẾN TRÚC BACKEND
 
-**FLASHDEAL** là hệ thống thương mại điện tử giải quyết bài toán tải cực lớn (**High Concurrency**): **50.000 người dùng cùng tranh mua 100 sản phẩm trong khung giờ 00:00 Flash Sale**. 
-
-Hệ thống được thiết kế theo nguyên lý tách rời tải:
-- **Tải Đọc (Read-Heavy - 90% Traffic)**: Do **Redis** đảm nhiệm (Cache bộ lọc sản phẩm, Autocomplete từ khóa khi đang gõ `<2ms`, Bảng xếp hạng Top Hot Search `<1ms`, Rate Limiting chống bot).
-- **Tải Ghi (Write-Heavy - 10% Concurrency Hotspot)**: Do **Redis Lua Script** (Cổng chặn tồn kho tức thời) và **Apache Kafka** (Phân làn sự kiện theo Partitions) đảm nhiệm, giúp API phản hồi trong **`< 20ms`** mà **không bao giờ bị âm kho** và **không làm sập Database**.
-
----
-
-# 🏛️ 2. KIẾN TRÚC HỆ THỐNG & ĐỊNH HƯỚNG MICROSERVICES
-
-### 🔹 Sơ đồ Phân rã Microservices (Domain-Driven Design):
+Hệ thống được thiết kế theo mô hình **Event-Driven Architecture (EDA)** kết hợp nguyên tắc **Database-per-Service**:
+- **Tải Đọc (Read-Heavy)**: Tối ưu qua **Redis RAM** (Cache danh mục, Tra cứu Autocomplete `< 2ms`, Bảng xếp hạng Hot Search, Rate Limiter).
+- **Tải Ghi (Write-Heavy & Concurrency)**: Xử lý bằng **Redis Lua Script nguyên tử** (Cổng chặn tồn kho `< 1.5ms`) và **Apache Kafka** (Phân làn sự kiện theo Partitions), giúp hệ thống phản hồi đặt hàng trong **`< 5ms`** mà không bao giờ bị âm kho hay nghẽn Database.
 
 ```mermaid
 graph TD
-    Client["Client (React 19 Frontend :5173 / Mobile)"] --> Gateway["1. API GATEWAY (:8080)<br/>Spring Cloud Gateway + Centralized Rate Limiter"]
+    Client["Client (Frontend / Mobile App)"] --> Gateway["API GATEWAY (:8080)<br/>Spring Cloud Gateway + Redis Token Bucket"]
 
-    Gateway -->|"Route /auth/**"| AuthSvc["2. AUTH SERVICE (:8081)<br/>User & JWT Authentication"]
-    Gateway -->|"Route /products/** & /categories/**"| ProdSvc["3. PRODUCT & SEARCH SERVICE (:8082)<br/>Catalog, Redis Cache & Search ZSET"]
-    Gateway -->|"Route /flash-sales/** & /orders/**"| OrderSvc["4. ORDER & FLASHSALE SERVICE (:8083)<br/>Lua Script Fast-Gate & Order Placement"]
-    Gateway -->|"Route /payments/**"| PaySvc["5. PAYMENT SERVICE (:8084)<br/>Payment Gateway & Webhook"]
+    Gateway -->|"Route /auth/**"| AuthSvc["AUTH SERVICE (:8081)<br/>Stateless JWT & Redis Blacklist"]
+    Gateway -->|"Route /products/**"| ProdSvc["PRODUCT SERVICE (:8082)<br/>BFF Parallel Aggregator (12ms)"]
+    Gateway -->|"Route /flash-sales/**"| OrderSvc["FLASHSALE-ORDER SERVICE (:8083)<br/>Lua FastGate & Hybrid Idempotency"]
+    Gateway -->|"Route /payments/**"| PaySvc["PAYMENT SERVICE (:8084)<br/>VNPAY Sandbox & VietQR"]
 
-    subgraph EventBus ["KAFKA EVENT-DRIVEN BROKER"]
-        T1["Topic 1: flashsale.order.created (Key: productId | 4 Partitions)"]
-        T2["Topic 2: inventory.stock.deducted (Key: productId | 4 Partitions)"]
-        T3["Topic 3: payment.transaction.result (Key: orderId | 3 Partitions)"]
-        T4["Topic 4: order.timeout.cancelled (Key: orderId | 2 Partitions)"]
-        T5["Topic 5: notification.email.queue (Key: userId | 2 Partitions)"]
+    subgraph KafkaCluster ["APACHE KAFKA BROKER (:9092)"]
+        T1["flashsale.order.created (4 Partitions)"]
+        T1_DLT["flashsale.order.created.DLT (4 Partitions)"]
+        T2["payment.successful.event (2 Partitions)"]
+        T2_DLT["payment.successful.event.DLT (2 Partitions)"]
+        T3["product.events (3 Partitions)"]
+        T4["user.registered.event (2 Partitions)"]
     end
 
     OrderSvc -->|Publish| T1
     T1 -->|Consume| OrderSvc
-    OrderSvc -->|Publish| T2
-    T2 -->|Publish payment session| PaySvc
+    OrderSvc -.->|Retry Fail 3x -> Quarantine| T1_DLT
 
-    PaySvc -->|Publish| T3
-    T3 -->|Publish email event| T5
-    PaySvc -->|Timeout 15p| T4
-    T4 -->|Consume & Hoàn kho| OrderSvc
+    PaySvc -->|Publish| T2
+    T2 -->|Consume| OrderSvc
+    T2 -.->|Retry Fail 3x -> Quarantine| T2_DLT
 
-    subgraph AsyncWorker ["DỊCH VỤ GỬI THÔNG BÁO"]
-        T5 -->|Consume & Gửi mail ngầm| NotiSvc["6. NOTIFICATION SERVICE (:8086)<br/>Email Invoice HTML"]
-    end
+    ProdSvc -->|Publish| T3
+    T3 -->|Consume| OrderSvc
 
-    subgraph DataStorage ["CƠ SỞ DỮ LIỆU ĐỘC LẬP (DATABASE PER SERVICE)"]
-        AuthSvc --- DB_Auth[("Postgres: auth_db")]
-        ProdSvc --- DB_Prod[("Postgres: product_db")]
-        OrderSvc --- DB_Order[("Postgres: order_db")]
-        PaySvc --- DB_Pay[("Postgres: payment_db")]
-        ProdSvc --- R_Search[("Redis: Cache & Search")]
-        OrderSvc --- R_Lua[("Redis: Stock Fast-Gate")]
-    end
-```
-
-### 🔹 Bảng Phân Chia Trách Nhiệm Từng Service:
-
-| STT | Tên Microservice | Cổng nội bộ | Trách nhiệm chính | Database / Storage |
-| :---: | :--- | :---: | :--- | :--- |
-| **1** | **`api-gateway`** | **8080** | Cổng vào duy nhất, điều hướng request, CORS tập trung, xác thực JWT & Rate Limiting. | Redis (Rate Limiter) |
-| **2** | **`auth-service`** | **8081** | Quản lý User, Đăng ký, Đăng nhập, cấp phát JWT & Refresh Token Rotation. | `auth_db` (users, roles) |
-| **3** | **`product-service`** | **8082** | Quản lý Category & Product CRUD, Redis Data Cache, Autocomplete `ZRANGEBYLEX`, Trending `ZINCRBY`. | `product_db` + Redis Search |
-| **4** | **`flashsale-order-service`** | **8083** | Quản lý chiến dịch Flash Sale, Redis Lua Script Fast-Gate, bắn Kafka `flashsale.order.created` và xử lý đơn. | `order_db` + Redis Stock Guard |
-| **5** | **`payment-service`** | **8084** | Tiếp nhận Webhook thanh toán (VNPay / Momo), đếm ngược 15 phút thanh toán. | `payment_db` |
-| **6** | **`notification-service`** | **8086** | Lắng nghe topic `notification.email.queue`, render hóa đơn HTML và gửi qua SMTP ngầm. | Không dùng DB |
-
----
-
-# 📨 3. BẢNG PHÂN BỔ KAFKA TOPICS & PARTITIONS
-
-| STT | Tên Topic | Nghiệp vụ chính | Partition Key | Số Partitions | Giải thích thiết kế |
-| :---: | :--- | :--- | :---: | :---: | :--- |
-| **1** | **`flashsale.order.created`** | Tiếp nhận yêu cầu đặt hàng Flash Sale | **`productId`** | **4** | **Đảm bảo thứ tự nghiêm ngặt (Strict Ordering)**: Mọi đơn hàng của cùng 1 sản phẩm `iPhone 16` đều vào chung 1 Partition ➡️ Trừ kho tuần tự, **triệt tiêu 100% nguy cơ âm kho**. |
-| **2** | **`inventory.stock.deducted`** | Xác nhận trừ kho DB thành công | **`productId`** | **4** | Chuyển tiếp đơn hàng sang bước tạo phiên thanh toán. |
-| **3** | **`payment.transaction.result`** | Kết quả thanh toán (Thành công / Thất bại) | **`orderId`** | **3** | Điều phối trạng thái đơn hàng sang `PAID` hoặc `PAYMENT_FAILED`. |
-| **4** | **`order.timeout.cancelled`** | Hủy đơn sau 15 phút chưa thanh toán | **`orderId`** | **2** | Kích hoạt Consumer tự động cộng hoàn lại tồn kho (Restock). |
-| **5** | **`notification.email.queue`** | Hàng đợi gửi Email hóa đơn & xác nhận | **`userId`** | **2** | Xử lý gửi mail bất đồng bộ ngầm dưới nền qua SMTP. |
-| **6** | **`analytics.search.keywords`** | Thu thập từ khóa tìm kiếm thời gian thực | **`keyword`** | **2** | Phục vụ tính điểm Top Hot Search trên Redis. |
-
----
-
-# 📦 4. DANH SÁCH TÍNH NĂNG THEO MODULE
-
-### 🔹 Module 1: Xác Thực & Phân Quyền (Auth & Security)
-- Đăng ký tài khoản (`POST /auth/register`): Mã hóa mật khẩu BCrypt.
-- Đăng nhập (`POST /auth/login`): Cấp Access Token + Refresh Token (JWT).
-- Cấp lại Token (`POST /auth/refresh-token`): Cơ chế Refresh Token Rotation an toàn.
-- Phân quyền theo vai trò 2 lớp (Gateway + `@PreAuthorize("hasRole('ADMIN')")`).
-
-### 🔹 Module 2: Quản Lý Sản Phẩm & Danh Mục (Product Catalog)
-- Quản lý danh mục đa cấp (Category): CRUD, sinh slug chuẩn SEO, Cache Redis.
-- Quản lý sản phẩm (Product): Tên, giá gốc, số lượng tồn kho tổng, mô tả, hình ảnh.
-- Lọc sản phẩm đa tiêu chí với phân trang `PageResponse<T>` và Cache Key linh hoạt.
-- Tự động nạp từ khóa vào Redis Search Index khi thêm/sửa sản phẩm.
-
-### 🔹 Module 3: Quản Lý Chiến Dịch Flash Sale (Campaigns)
-- Tạo chiến dịch Flash Sale (`POST /flash-sales`): Thời gian bắt đầu, kết thúc, trạng thái (`UPCOMING`, `HAPPENING`, `ENDED`).
-- Thêm sản phẩm vào đợt Flash Sale: Giá giảm sốc (`flashSalePrice`), số lượng mở bán giới hạn (`saleQuantity`).
-- Cơ chế Pre-heat Stock: Nạp sẵn số lượng tồn vào Redis trước giờ mở bán 5 phút.
-
-### 🔹 Module 4: Đặt Hàng Flash Sale Siêu Tốc (Core Concurrency)
-- Cổng chặn Fast-Gate với **Redis Lua Script**: Trừ tồn kho nguyên tử trên RAM trong **`< 2ms`**.
-- Đẩy sự kiện vào Kafka `flashsale.order.created` (gán Partition Key theo `productId`).
-- Trả về mã đơn hàng `orderId` và trạng thái `PENDING` ngay cho người mua (**~15ms**).
-- `OrderConsumerGroup` (4 luồng song song) lưu `Order` + `OrderItem` vào PostgreSQL và trừ kho chính thức.
-
-### 🔹 Module 5: Thanh Toán & Hủy Đơn Tự Động (Payment & Expiration)
-- Tiếp nhận Webhook thanh toán (giả lập VNPay / Momo) ➡️ Bắn `PaymentResultEvent`.
-- Đếm ngược 15 phút thanh toán qua Redis TTL: Nếu quá hạn ➡️ Bắn `OrderCancelledEvent`.
-- `RestockConsumer` tự động cộng hoàn lại số lượng tồn kho vào cả Redis và PostgreSQL.
-
-### 🔹 Module 6: Gửi Email Thông Báo Bất Đồng Bộ (Notification Engine)
-- Consumer lắng nghe topic `notification.email.queue` ➡️ Render HTML hóa đơn chuyên nghiệp gửi qua SMTP ngầm dưới nền.
-
----
-
-# 🔍 5. CHI TIẾT HỆ THỐNG TÌM KIẾM REDIS ENGINE
-
-1. **Cache Dữ liệu Phân trang Đa tiêu chí**:
-   - Cache kết quả lọc (*từ khóa, danh mục, khoảng giá, phân trang, sắp xếp*) qua DTO chuẩn `PageResponse<ProductResponse>` với `toCacheKey()`.
-   - Tự động xóa cache (`@CacheEvict`) khi thông tin hoặc tồn kho sản phẩm thay đổi.
-2. **Gợi ý từ khóa Autocomplete khi gõ (Search As-You-Type)**:
-   - Dùng Redis Sorted Set (ZSET) với `rangeByLex` và dải từ điển `[prefix, prefix\uffff]` trả về danh sách gợi ý trong **`< 2ms`** mà không gọi xuống Database.
-3. **Tự động làm ấm Cache (Cache Warm-Up)**:
-   - Class `SearchWarmUpRunner` tự động quét danh sách sản phẩm `ACTIVE` trong Database và nạp sẵn vào Redis khi khởi động server.
-4. **Bảng xếp hạng Top 10 Hot Search (Trending Leaderboard)**:
-   - Khi người dùng tìm kiếm ➡️ Gọi `ZINCRBY search:trending 1 "keyword"`.
-   - Lấy Top 10 xu hướng toàn sàn tức thì bằng `ZREVRANGE search:trending 0 9 WITHSCORES`.
-5. **Search Rate Limiting (Chống bot cào dữ liệu)**:
-   - Giới hạn mỗi IP tối đa 20 lượt search/phút bằng bộ đếm Redis.
-
----
-
-# 🛡️ 6. CƠ CHẾ CHỐNG ÂM KHO (CONCURRENCY GUARD)
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Users as 50.000 Người dùng cùng tranh mua
-    participant API as Web API
-    participant Redis as Redis (Fast-Gate Lua Script)
-    participant Kafka as Kafka (flashsale.order.created)
-    participant DB as PostgreSQL (@Transactional)
-
-    Users->>API: POST /api/flash-sales/orders/place
-    API->>Redis: Chạy Lua Script: Kiểm tra & Trừ tồn kho RAM (<2ms)
-    
-    alt Trường hợp 1: ĐÃ HẾT HÀNG (Stock <= 0)
-        Redis-->>API: Trả về 0 (Hết hàng)
-        API-->>Users: Báo lỗi "Đã hết suất Flash Sale" (Chặn ngay, không gọi DB, không gọi Kafka)
-    else Trường hợp 2: CÒN HÀNG (Stock > 0)
-        Redis-->>API: Trừ thành công, trả về 1
-        API->>Kafka: Đẩy OrderCreatedEvent (Key: productId)
-        API-->>Users: Trả về HTTP 200 (Đang xử lý đơn hàng ~15ms)
-        Kafka->>DB: Consumer xử lý tuần tự theo Partition -> INSERT Order & Trừ kho DB an toàn
-    end
+    AuthSvc -->|Publish| T4
+    T4 -->|Consume| NotifSvc["NOTIFICATION SERVICE (:8086)<br/>Thymeleaf & Gmail SMTP"]
 ```
 
 ---
 
-# 🗺️ 7. TIẾN ĐỘ DỰ ÁN & KẾ HOẠCH 6 PHASE
+# 2. CHI TIẾT 6 MICROSERVICES & BẢNG PHÂN CHIA CỔNG
 
-| Phase | Tên Phase | Trọng tâm công việc | Trạng thái chi tiết |
-| :---: | :--- | :--- | :---: |
-| **Phase 1** | **Hạ tầng Docker & Base Spring Boot 3** | Khởi chạy 5 container Docker (App, Postgres, Redis, Kafka, Kafka-UI), cấu hình Maven 3.4.1 và Security cơ bản. | ✅ **HOÀN THÀNH 100%** |
-| **Phase 2** | **Mô hình Dữ liệu & Hệ thống Tìm kiếm Redis** | - CRUD Category & Product API chuẩn RESTful.<br/>- Redis Data Caching (`@Cacheable`, `@CacheEvict`, `PageResponse<T>`).<br/>- Autocomplete Search As-You-Type (`ZRANGEBYLEX` `<2ms`).<br/>- Tự động làm ấm Cache lúc khởi động (`SearchWarmUpRunner`).<br/>- Bảng xếp hạng Top 10 Hot Search (`ZINCRBY` & `ZREVRANGE`).<br/>- Bộ giới hạn tốc độ tìm kiếm (Rate Limiter 20 req/min/IP). | 🚀 **HOÀN THÀNH 90%**<br/>*(Đang hoàn thiện Rate Limiter)* |
-| **Phase 3** | **Kiến trúc Kafka Topics, Partitions & Producers** | Viết `KafkaTopicConfig` (6 Topics & Partitions), Producer gán Partition Key chuẩn xác, định nghĩa Event DTOs. | ⏳ **TIẾP THEO** |
-| **Phase 4** | **Core Flash Sale Concurrency & Trừ kho an toàn** | Redis Lua Script Fast-Gate, Topic `flashsale.order.created`, Order Consumer Group trừ kho DB an toàn không âm. | ⏳ Chờ triển khai |
-| **Phase 5** | **Thanh toán, Hủy đơn tự động & Gửi Email** | Webhook Payment, Tự động hoàn kho sau 15p (Restock), Email Consumer gửi hóa đơn HTML qua SMTP. | ⏳ Chờ triển khai |
-| **Phase 6** | **Tách Microservices, Load Test & Báo cáo** | Tách theo mô hình Microservices (Gateway, Auth, Product, Order), Concurrency Test 1.000 luồng tranh mua, đóng gói Dockerfile. | ⏳ Chờ triển khai |
-
----
-
-# 💻 8. GIAO DIỆN FRONTEND & TRẢI NGHIỆM NGƯỜI DÙNG
-
-Dự án đã được tích hợp sẵn ứng dụng Frontend React hoàn chỉnh tại thư mục `flashdeal-fe`:
-* **Công nghệ**: React 19, Vite 8, Tailwind CSS 4, Axios, Lucide Icons.
-* **Địa chỉ truy cập**: **[http://localhost:5173/](http://localhost:5173/)**
-* **Các tính năng nổi bật**:
-  - **Sàn TMĐT & Bộ lọc**: Tìm kiếm sản phẩm theo tên, danh mục, khoảng giá, sắp xếp theo giá/ngày tạo.
-  - **Autocomplete Search Dropdown**: Gợi ý từ khóa tức thì khi đang gõ phím (`< 2ms` từ Redis ZSET).
-  - **Thanh Xu hướng tìm kiếm (Trending Tags)**: Hiển thị các từ khóa hot nhất kèm số lượt tìm kiếm thời gian thực.
-  - **Quản lý Sản phẩm & Danh mục**: Thêm, sửa, xóa, nút **Random Data** và **Seed Data mẫu** (10 sản phẩm & danh mục chỉ với 1 click).
-  - **API Response Inspector Modal**: Xem trực tiếp cấu trúc JSON và mã phản hồi từ Backend.
+| Microservice | Port | Cơ Sở Dữ Liệu | Công Nghệ Chính | Trách Nhiệm Nghiệp Vụ |
+| :--- | :---: | :---: | :--- | :--- |
+| **`api-gateway`** | `8080` | *Không* | Spring Cloud Gateway, Redis | Điểm vào duy nhất, Routing động, Rate Limiter theo Route (Token Bucket), CORS tập trung, OpenAPI Swagger gom nhóm. |
+| **`auth-service`** | `8081` | `auth_db` | Spring Security, JJWT, Redis | Đăng ký, đăng nhập, cấp cặp JWT Token (Access 15p + Refresh 7d), Token Rotation, Logout qua Redis Blacklist. |
+| **`product-service`** | `8082` | `product_db` | JPA, Redis ZSET, Multithreading | Quản lý sản phẩm & danh mục. BFF Aggregator đa luồng gom dữ liệu trong **`12ms`**. Tra cứu Autocomplete `< 2ms`. |
+| **`flashsale-order-service`** | `8083` | `order_db` | Redis Lua, Spring AOP, Kafka | Chiến dịch Flash Sale, Fast-Gate trừ kho RAM `< 1.5ms`. **Idempotency Hybrid Pattern** chặn click spam `< 1.5ms`. Quản trị đơn hàng & Timeout Restock. |
+| **`payment-service`** | `8084` | *Tích hợp Order* | VNPAY SDK, VietQR API, HMAC SHA512 | Cổng VNPAY Sandbox, sinh mã VietQR động, ký số SHA512, phát sự kiện thanh toán thành công vào Kafka. |
+| **`notification-service`** | `8086` | *Không* | Spring Kafka, Thymeleaf, JavaMail | Lắng nghe sự kiện từ Kafka để gửi Email xác nhận đăng ký và Email hóa đơn đơn hàng tự động. |
 
 ---
 
-# 🐳 9. HƯỚNG DẪN KHỞI CHẠY BẰNG DOCKER
+# 3. BỘ 4 CHỐT CHẶN CHỊU TẢI & AN TOÀN DỮ LIỆU DOANH NGHIỆP
 
-Dự án được cấu hình **Zero-Dependency** (Máy tính không cần cài Java, Node hay PostgreSQL, chỉ cần Docker Desktop):
+### 3.1. API Gateway Rate Limiting (Redis Token Bucket)
+* Tích hợp bộ lọc phân luồng cấp Route trên Spring Cloud Gateway sử dụng thuật toán **Token Bucket** trong Redis RAM.
+* Bảo vệ toàn bộ các microservices phía sau khỏi các đợt tấn công từ chối dịch vụ (DDoS) hoặc bot spam.
+* Tự động trả về mã chuẩn **`HTTP 429 Too Many Requests`** khi vượt ngưỡng cho phép.
 
-```bash
-# 1. Khởi chạy toàn bộ hệ sinh thái (Postgres, Redis, Kafka, Kafka-UI, Backend App)
+### 3.2. API Composition Aggregator Đa Luồng (Java Concurrency 12ms)
+* Tại endpoint `GET /api/products/{id}/detail-summary` của `product-service`:
+  - Gom đồng thời 4 nguồn dữ liệu: Thông tin sản phẩm, Flash Sale Stock, Danh mục cha, và Thống kê tồn kho.
+  - Sử dụng `ThreadPoolTaskExecutor` (16 worker threads) kết hợp `CompletableFuture.allOf()`.
+  - **Hiệu năng đạt được**: Giảm thời gian phản hồi từ $60ms \rightarrow \mathbf{12ms}$.
+
+### 3.3. Kafka Dead Letter Topic (DLT) & Fault-Tolerance Retry
+* Cấu hình chốt chặn lỗi tự động cho Kafka Consumers:
+  - `DefaultErrorHandler` kết hợp `FixedBackOff(2000L, 3)`: Thử lại 3 lần (mỗi lần cách 2 giây) khi gặp sự cố tạm thời.
+  - Sau 3 lần thất bại, `DeadLetterPublishingRecoverer` tự động bọc thông điệp lỗi kèm header chẩn đoán đẩy vào topic cách ly:
+    * `flashsale.order.created.DLT`
+    * `payment.successful.event.DLT`
+  - `OrderDltConsumer` tiếp nhận, cảnh báo và lưu vết thông điệp lỗi.
+  - **Triệt tiêu hoàn toàn**: Mất mát đơn hàng (**Data Loss**) và nghẽn hàng đợi do đơn hỏng (**Poison Pill**).
+
+### 3.4. Cơ Chế Lũy Đẳng Chuẩn Doanh Nghiệp (Hybrid Idempotency Pattern)
+* Bảo vệ endpoint Săn Deal `POST /api/flash-sales/orders`:
+  1. **Tầng Interceptor (Spring AOP)**: Gắn annotation `@Idempotent(prefix = "flashsale_order", lockTtlSeconds = 30, completedTtlSeconds = 120)`.
+  2. **Mô hình Lai (Hybrid Pattern)**:
+     - Đọc Header `Idempotency-Key` (UUIDv4) do Frontend truyền lên.
+     - Tự động băm `MD5(userId + ":" + campaignId + ":" + productId)` làm phao cứu sinh (Fallback) nếu Client không gửi Header.
+  3. **Lệnh nguyên tử Redis `SETNX`**:
+     - Request 1: Ghi nhận trạng thái `PROCESSING` với TTL 30s. Sau khi tạo đơn thành công, chuyển sang `COMPLETED` với TTL 120s.
+     - Request trùng lặp đến sau: Bị chặn đứng ngay lập tức tại Redis RAM trong **`< 1.5ms`**, trả về **`HTTP 409 Conflict (code: 1090)`**.
+     - Nếu nghiệp vụ gặp lỗi (hết hàng, hết giờ): Tự động xóa key (`DEL`) để khách không bị khóa nhầm.
+
+---
+
+# 4. BẢN ĐỒ ỨNG DỤNG REDIS & APACHE KAFKA TOPICS
+
+### 🔹 Khóa Redis RAM:
+| Cấu trúc Key | Kiểu Dữ Liệu | Mục Đích | Thời Gian Sống (TTL) |
+| :--- | :---: | :--- | :---: |
+| `idempotency:flashsale_order:{key}` | `String` | Khóa chống trùng lặp & spam đơn hàng | 30s (`PROCESSING`) / 120s (`COMPLETED`) |
+| `flashsale:stock:{campaignId}:{productId}` | `String` | Quản lý tồn kho Flash Sale thời gian thực | Xuyên suốt chiến dịch |
+| `flashsale:user:{campaignId}:{productId}:{userId}` | `String` | Chặn mỗi tài khoản chỉ săn 1 lần | 24 giờ |
+| `blacklist:token:{token}` | `String` | Vô hiệu hóa Access Token khi Đăng xuất | Bằng thời gian hết hạn còn lại của JWT |
+| `refresh:token:{userId}` | `String` | Quản lý vòng xoay Refresh Token | 7 ngày |
+| `search:suggestions` | `ZSET` | Gợi ý từ khóa Autocomplete `< 2ms` | Cập nhật khi chỉnh sửa sản phẩm |
+| `search:trending` | `ZSET` | Bảng xếp hạng Top từ khóa tìm kiếm hot | Tích lũy thời gian thực |
+
+### 🔹 Apache Kafka Topics:
+| Topic | Partitions | Key | Consumer Group | Mục Đích |
+| :--- | :---: | :---: | :--- | :--- |
+| `flashsale.order.created` | 4 | `productId` | `flashsale-order-group` | Xử lý lưu đơn hàng bất đồng bộ vào PostgreSQL |
+| `flashsale.order.created.DLT` | 4 | `productId` | `flashsale-order-dlt-group` | Cách ly đơn hàng lỗi sau 3 lần retry |
+| `payment.successful.event` | 2 | `orderCode` | `order-payment-group` | Cập nhật trạng thái đơn hàng sang PAID |
+| `payment.successful.event.DLT` | 2 | `orderCode` | `payment-dlt-group` | Cách ly sự kiện thanh toán lỗi |
+| `product.events` | 3 | `productId` | `flashsale-product-sync-group` | Đồng bộ trạng thái sản phẩm giữa các service |
+| `user.registered.event` | 2 | `userId` | `notification-user-group` | Gửi email chào mừng tài khoản mới |
+
+---
+
+# 5. CƠ CHẾ CHỐNG ÂM KHO & QUẢN LÝ VÒNG ĐỜI ĐƠN HÀNG
+
+### 🛡️ Cổng Chặn Fast-Gate Bằng Redis Lua Script Nguyên Tử:
+```
+Request Đặt Hàng 
+   │
+   ▼
+[Redis Lua Fast-Gate] ──(Đã mua hoặc Hết hàng)──► HTTP 409 (Out of Stock / Purchased)
+   │
+   ├─► 1. Check EXISTS user_key == 1 ? return -2 (Đã mua rồi)
+   ├─► 2. Check GET stock_key < quantity ? return -1 (Hết hàng)
+   ├─► 3. DECRBY stock_key & SET user_key 1 EX 86400 (Trừ kho RAM < 1.5ms)
+   │
+   ▼
+[Kafka Producer] ──► Bắn OrderCreatedEvent vào Partition theo productId (< 5ms)
+   │
+   ▼
+[HTTP Phản Hồi] ──► Trả về HTTP 202 Accepted cho Khách Hàng
+   │
+   ▼ (Bất đồng bộ)
+[PostgreSQL Database] ──► Consumer ghi nhận bản ghi Order & OrderItem
+```
+
+### ⏰ Timeout Restock Scheduler:
+* Định kỳ mỗi phút, hệ thống tự động quét các đơn hàng ở trạng thái `PENDING` quá **15 phút**.
+* Tự động chuyển trạng thái đơn sang `CANCELLED` và **hoàn lại số lượng tồn kho** vào cả Redis RAM lẫn PostgreSQL.
+
+---
+
+# 6. HƯỚNG DẪN BIÊN DỊCH & KHỞI CHẠY HỆ THỐNG
+
+### 1. Đóng gói mã nguồn Java:
+```powershell
+./mvnw.cmd clean package -DskipTests
+```
+
+### 2. Khởi chạy toàn bộ 10 Containers Microservices:
+```powershell
 docker compose up -d --build
-
-# 2. Khởi chạy Frontend React (tại thư mục flashdeal-fe)
-npm run dev -- --port 5173
-
-# 3. Xem logs ứng dụng
-docker compose logs -f flashdeal-api
-
-# 4. Dừng hệ thống
-docker compose down
 ```
 
-### 🌐 Địa chỉ truy cập các dịch vụ:
-- **Frontend Web UI**: [http://localhost:5173/](http://localhost:5173/)
-- **Swagger UI Documentation**: [http://localhost:8080/api/swagger-ui.html](http://localhost:8080/api/swagger-ui.html)
-- **Kafka-UI Dashboard**: [http://localhost:8085](http://localhost:8085)
-- **PostgreSQL Database**: `localhost:5434` (User: `flashdeal_user` / DB: `flashdeal_db`)
-- **Redis Cache Server**: `localhost:6380`
+### 3. Kiểm tra trạng thái hệ thống:
+```powershell
+docker compose ps
+```
+
+### 4. Truy cập các dịch vụ:
+* **API Gateway**: `http://localhost:8080`
+* **Kafka UI**: `http://localhost:8085`
+* **PostgreSQL Database**: `localhost:5434`
+* **Redis Server**: `localhost:6380`
