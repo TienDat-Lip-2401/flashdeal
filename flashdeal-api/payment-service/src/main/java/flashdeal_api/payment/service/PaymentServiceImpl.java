@@ -1,18 +1,23 @@
 package flashdeal_api.payment.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import flashdeal_api.payment.config.VNPayConfig;
 import flashdeal_api.payment.dto.PaymentCallbackResponse;
 import flashdeal_api.payment.dto.VNPayCreatePaymentRequest;
 import flashdeal_api.payment.dto.VNPayPaymentResponse;
+import flashdeal_api.payment.entity.OutboxEvent;
+import flashdeal_api.payment.entity.OutboxStatus;
 import flashdeal_api.payment.entity.Payment;
 import flashdeal_api.payment.entity.PaymentStatus;
 import flashdeal_api.payment.model.event.PaymentSuccessfulEvent;
-import flashdeal_api.payment.producer.PaymentEventProducer;
+import flashdeal_api.payment.repository.OutboxRepository;
 import flashdeal_api.payment.repository.PaymentRepository;
 import flashdeal_api.payment.util.VNPayUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,8 +36,12 @@ public class PaymentServiceImpl implements PaymentService {
 
     private final VNPayConfig vnpayConfig;
     private final PaymentRepository paymentRepository;
-    private final PaymentEventProducer paymentEventProducer;
+    private final OutboxRepository outboxRepository;
     private final PaymentIdempotencyService paymentIdempotencyService;
+    private final ObjectMapper objectMapper;
+
+    @Value("${spring.kafka.topic.payment-successful:payment.successful.event}")
+    private String paymentSuccessfulTopic;
 
     private static final DateTimeFormatter VNP_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
     private static final ZoneId VN_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
@@ -232,22 +241,10 @@ public class PaymentServiceImpl implements PaymentService {
                 }
                 paymentRepository.save(payment);
 
-                log.info("[VNPay Callback] Giao dịch thành công cho đơn hàng: [{}]. Bắn sự kiện sang Kafka...", orderCode);
+                log.info("[VNPay Callback] Giao dịch thành công cho đơn hàng: [{}]. Ghi nhận sự kiện vào Outbox...", orderCode);
 
-                // 4. Bắn sự kiện sang Apache Kafka để order-service và notification-service cùng tiêu thụ
-                PaymentSuccessfulEvent event = PaymentSuccessfulEvent.builder()
-                        .paymentCode(payment.getPaymentCode())
-                        .orderCode(payment.getOrderCode())
-                        .userId(payment.getUserId())
-                        .userEmail(payment.getUserEmail())
-                        .amount(payment.getAmount())
-                        .paymentMethod("VNPAY")
-                        .vnpTransactionNo(transactionNo)
-                        .bankCode(bankCode)
-                        .paidAt(payment.getPaidAt())
-                        .build();
-
-                paymentEventProducer.publishPaymentSuccessfulEvent(event);
+                // 4. Lưu sự kiện vào bảng outbox_events trong cùng DB Transaction
+                saveOutboxEvent(payment, transactionNo, bankCode);
 
                 // 5. Ghi nhận trạng thái COMPLETED trong Redis (lưu 120s chống spam/reload)
                 paymentIdempotencyService.markCompleted(redisKey, 120L);
@@ -347,20 +344,8 @@ public class PaymentServiceImpl implements PaymentService {
             payment.setPaidAt(LocalDateTime.now());
             paymentRepository.save(payment);
 
-            // Bắn sự kiện sang Kafka
-            PaymentSuccessfulEvent event = PaymentSuccessfulEvent.builder()
-                    .paymentCode(payment.getPaymentCode())
-                    .orderCode(payment.getOrderCode())
-                    .userId(payment.getUserId())
-                    .userEmail(payment.getUserEmail())
-                    .amount(payment.getAmount())
-                    .paymentMethod("VNPAY")
-                    .vnpTransactionNo(payment.getVnpTransactionNo())
-                    .bankCode("NCB")
-                    .paidAt(payment.getPaidAt())
-                    .build();
-
-            paymentEventProducer.publishPaymentSuccessfulEvent(event);
+            // Ghi nhận sự kiện vào Outbox trong cùng DB Transaction
+            saveOutboxEvent(payment, payment.getVnpTransactionNo(), "NCB");
 
             // Đánh dấu hoàn tất trên Redis (120s)
             paymentIdempotencyService.markCompleted(redisKey, 120L);
@@ -378,6 +363,43 @@ public class PaymentServiceImpl implements PaymentService {
             paymentIdempotencyService.release(redisKey);
             log.error("[VNPay Sandbox] Lỗi khi giả lập thanh toán cho đơn [{}]: {}", orderCode, ex.getMessage(), ex);
             throw ex;
+        }
+    }
+
+    /**
+     * Ghi nhận sự kiện thanh toán thành công vào bảng outbox_events trong cùng DB Transaction.
+     */
+    private void saveOutboxEvent(Payment payment, String transactionNo, String bankCode) {
+        try {
+            PaymentSuccessfulEvent event = PaymentSuccessfulEvent.builder()
+                    .paymentCode(payment.getPaymentCode())
+                    .orderCode(payment.getOrderCode())
+                    .userId(payment.getUserId())
+                    .userEmail(payment.getUserEmail())
+                    .amount(payment.getAmount())
+                    .paymentMethod(payment.getPaymentMethod() != null ? payment.getPaymentMethod() : "VNPAY")
+                    .vnpTransactionNo(transactionNo)
+                    .bankCode(bankCode)
+                    .paidAt(payment.getPaidAt())
+                    .build();
+
+            String payload = objectMapper.writeValueAsString(event);
+
+            OutboxEvent outboxEvent = OutboxEvent.builder()
+                    .aggregateType("PAYMENT")
+                    .aggregateId(payment.getOrderCode())
+                    .eventType("PaymentSuccessfulEvent")
+                    .payload(payload)
+                    .topic(paymentSuccessfulTopic)
+                    .status(OutboxStatus.PENDING)
+                    .build();
+
+            outboxRepository.save(outboxEvent);
+            log.info("[Outbox] Đã lưu sự kiện thanh toán thành công cho đơn hàng: [{}] vào outbox_events (PENDING)",
+                    payment.getOrderCode());
+        } catch (JsonProcessingException e) {
+            log.error("[Outbox] Lỗi serialize payload sự kiện cho đơn hàng [{}]: {}", payment.getOrderCode(), e.getMessage(), e);
+            throw new RuntimeException("Lỗi lưu sự kiện Outbox", e);
         }
     }
 }
