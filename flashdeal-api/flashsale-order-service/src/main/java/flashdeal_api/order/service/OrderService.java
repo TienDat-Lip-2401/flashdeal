@@ -25,4 +25,6 @@ public interface OrderService {
     OrderResponse updateOrderStatusByAdmin(String orderCode, OrderStatus newStatus);
 
     OrderResponse confirmDeliveredByUser(String orderCode, Long userId);
+
+    void cancelAndRestockOrderByPaymentFailure(String orderCode, String failureReason);
 }

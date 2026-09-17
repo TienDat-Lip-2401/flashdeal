@@ -53,6 +53,15 @@ public class PaymentController {
         return ResponseEntity.ok(response);
     }
 
+    @PostMapping("/vnpay/simulate-fail")
+    @Operation(summary = "Giả lập thanh toán VNPAY thất bại (Dành cho kiểm thử luồng bù trừ Saga)")
+    public ResponseEntity<PaymentCallbackResponse> simulateFailPayment(
+            @RequestParam String orderCode,
+            @RequestParam(required = false, defaultValue = "Khách hàng hủy thanh toán hoặc tài khoản không đủ số dư") String reason) {
+        PaymentCallbackResponse response = paymentService.simulateFailPayment(orderCode, reason);
+        return ResponseEntity.ok(response);
+    }
+
     @GetMapping("/order/{orderCode}")
     @Operation(summary = "Tra cứu thông tin và trạng thái thanh toán theo mã đơn hàng")
     public ResponseEntity<?> getPaymentByOrderCode(@PathVariable String orderCode) {

@@ -14,4 +14,6 @@ public interface PaymentService {
     PaymentCallbackResponse processVNPayCallback(Map<String, String> allParams);
 
     PaymentCallbackResponse simulateSuccessPayment(String orderCode, String email);
+
+    PaymentCallbackResponse simulateFailPayment(String orderCode, String reason);
 }

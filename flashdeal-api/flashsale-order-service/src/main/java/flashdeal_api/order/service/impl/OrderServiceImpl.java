@@ -335,4 +335,38 @@ public class OrderServiceImpl implements OrderService {
                 .createdAt(order.getCreatedAt())
                 .build();
     }
+
+    @Override
+    @Transactional
+    public void cancelAndRestockOrderByPaymentFailure(String orderCode, String failureReason) {
+        Order order = orderRepository.findByOrderCode(orderCode).orElse(null);
+        if (order == null) {
+            log.warn("[Saga Compensating] Không tìm thấy đơn hàng với mã: [{}] để thực hiện bù trừ!", orderCode);
+            return;
+        }
+
+        if (order.getStatus() == OrderStatus.CANCELLED) {
+            log.info("[Saga Compensating] Đơn hàng [{}] đã ở trạng thái CANCELLED trước đó (Idempotent skipped).", orderCode);
+            return;
+        }
+
+        if (order.getStatus() == OrderStatus.PAID) {
+            log.warn("[Saga Compensating] Đơn hàng [{}] đã ở trạng thái PAID, không thể bù trừ hủy đơn!", orderCode);
+            return;
+        }
+
+        // 1. Chuyển trạng thái đơn sang CANCELLED
+        order.setStatus(OrderStatus.CANCELLED);
+        orderRepository.save(order);
+
+        // 2. Giao dịch bù trừ: Hoàn kho vào Redis RAM và PostgreSQL
+        order.getItems().forEach(item -> {
+            preHeatService.restock(order.getCampaignId(), item.getProductId(), order.getUserId(), item.getQuantity());
+            productRepository.findByCampaignIdAndProductId(order.getCampaignId(), item.getProductId())
+                    .ifPresent(p -> productRepository.restockDb(p.getId(), item.getQuantity()));
+        });
+
+        log.info("[Saga Compensating] Đã hủy đơn hàng [{}] và hoàn trả tồn kho Flash Sale thành công! Lý do: {}",
+                orderCode, failureReason);
+    }
 }

@@ -3,6 +3,7 @@ package flashdeal_api.payment.scheduler;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import flashdeal_api.payment.entity.OutboxEvent;
 import flashdeal_api.payment.entity.OutboxStatus;
+import flashdeal_api.payment.model.event.PaymentFailedEvent;
 import flashdeal_api.payment.model.event.PaymentSuccessfulEvent;
 import flashdeal_api.payment.repository.OutboxRepository;
 import lombok.RequiredArgsConstructor;
@@ -80,6 +81,8 @@ public class OutboxScheduler {
             Object payloadObject;
             if ("PaymentSuccessfulEvent".equals(event.getEventType())) {
                 payloadObject = objectMapper.readValue(event.getPayload(), PaymentSuccessfulEvent.class);
+            } else if ("PaymentFailedEvent".equals(event.getEventType())) {
+                payloadObject = objectMapper.readValue(event.getPayload(), PaymentFailedEvent.class);
             } else {
                 payloadObject = objectMapper.readTree(event.getPayload());
             }

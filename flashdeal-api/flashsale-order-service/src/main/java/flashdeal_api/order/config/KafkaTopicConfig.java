@@ -13,6 +13,8 @@ public class KafkaTopicConfig {
     public static final String TOPIC_PRODUCT_EVENTS = "product.events";
     public static final String TOPIC_PAYMENT_SUCCESSFUL = "payment.successful.event";
     public static final String TOPIC_PAYMENT_SUCCESSFUL_DLT = "payment.successful.event.DLT";
+    public static final String TOPIC_PAYMENT_FAILED = "payment.failed.event";
+    public static final String TOPIC_PAYMENT_FAILED_DLT = "payment.failed.event.DLT";
 
     @Bean
     public NewTopic flashsaleOrderCreatedTopic() {
@@ -41,6 +43,22 @@ public class KafkaTopicConfig {
     @Bean
     public NewTopic paymentSuccessfulDltTopic() {
         return TopicBuilder.name(TOPIC_PAYMENT_SUCCESSFUL_DLT)
+                .partitions(2)
+                .replicas(1)
+                .build();
+    }
+
+    @Bean
+    public NewTopic paymentFailedTopic() {
+        return TopicBuilder.name(TOPIC_PAYMENT_FAILED)
+                .partitions(2)
+                .replicas(1)
+                .build();
+    }
+
+    @Bean
+    public NewTopic paymentFailedDltTopic() {
+        return TopicBuilder.name(TOPIC_PAYMENT_FAILED_DLT)
                 .partitions(2)
                 .replicas(1)
                 .build();

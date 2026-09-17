@@ -2,6 +2,7 @@ package flashdeal_api.order.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import flashdeal_api.order.model.event.OrderCreatedEvent;
+import flashdeal_api.order.model.event.PaymentFailedEvent;
 import flashdeal_api.order.model.event.PaymentSuccessfulEvent;
 import flashdeal_api.order.model.event.ProductEvent;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -112,6 +113,31 @@ public class KafkaConsumerConfig {
             DefaultErrorHandler kafkaDefaultErrorHandler) {
         ConcurrentKafkaListenerContainerFactory<String, PaymentSuccessfulEvent> factory = new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(paymentSuccessfulConsumerFactory);
+        factory.setConcurrency(2);
+        factory.setCommonErrorHandler(kafkaDefaultErrorHandler);
+        return factory;
+    }
+
+    // 2b. Container Factory cho PaymentFailedEvent (Thanh toán VNPAY thất bại -> Saga bù trừ: Hủy đơn & Hoàn kho)
+    @Bean
+    public ConsumerFactory<String, PaymentFailedEvent> paymentFailedConsumerFactory(ObjectMapper objectMapper) {
+        JsonDeserializer<PaymentFailedEvent> deserializer = new JsonDeserializer<>(PaymentFailedEvent.class, objectMapper);
+        deserializer.addTrustedPackages("*");
+        deserializer.setUseTypeHeaders(false);
+
+        return new DefaultKafkaConsumerFactory<>(
+                baseConsumerConfigs("order-payment-failed-group"),
+                new StringDeserializer(),
+                deserializer
+        );
+    }
+
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, PaymentFailedEvent> paymentFailedKafkaListenerContainerFactory(
+            ConsumerFactory<String, PaymentFailedEvent> paymentFailedConsumerFactory,
+            DefaultErrorHandler kafkaDefaultErrorHandler) {
+        ConcurrentKafkaListenerContainerFactory<String, PaymentFailedEvent> factory = new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(paymentFailedConsumerFactory);
         factory.setConcurrency(2);
         factory.setCommonErrorHandler(kafkaDefaultErrorHandler);
         return factory;

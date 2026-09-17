@@ -10,6 +10,7 @@ import flashdeal_api.payment.entity.OutboxEvent;
 import flashdeal_api.payment.entity.OutboxStatus;
 import flashdeal_api.payment.entity.Payment;
 import flashdeal_api.payment.entity.PaymentStatus;
+import flashdeal_api.payment.model.event.PaymentFailedEvent;
 import flashdeal_api.payment.model.event.PaymentSuccessfulEvent;
 import flashdeal_api.payment.repository.OutboxRepository;
 import flashdeal_api.payment.repository.PaymentRepository;
@@ -42,6 +43,9 @@ public class PaymentServiceImpl implements PaymentService {
 
     @Value("${spring.kafka.topic.payment-successful:payment.successful.event}")
     private String paymentSuccessfulTopic;
+
+    @Value("${spring.kafka.topic.payment-failed:payment.failed.event}")
+    private String paymentFailedTopic;
 
     private static final DateTimeFormatter VNP_DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
     private static final ZoneId VN_ZONE = ZoneId.of("Asia/Ho_Chi_Minh");
@@ -262,7 +266,10 @@ public class PaymentServiceImpl implements PaymentService {
                 payment.setStatus(PaymentStatus.FAILED);
                 paymentRepository.save(payment);
                 paymentIdempotencyService.release(redisKey);
-                log.warn("[VNPay Callback] Giao dịch thất bại với mã lỗi: {}", responseCode);
+                log.warn("[VNPay Callback] Giao dịch thất bại với mã lỗi: {}. Ghi nhận sự kiện thất bại vào Outbox...", responseCode);
+
+                // Lưu sự kiện thất bại vào bảng outbox_events để kích hoạt chuỗi Saga Bù trừ
+                savePaymentFailedOutboxEvent(payment, "Giao dịch VNPAY thất bại hoặc bị hủy (Mã lỗi: " + responseCode + ")");
 
                 return PaymentCallbackResponse.builder()
                         .responseCode(responseCode)
@@ -366,6 +373,58 @@ public class PaymentServiceImpl implements PaymentService {
         }
     }
 
+    @Override
+    @Transactional
+    public PaymentCallbackResponse simulateFailPayment(String orderCode, String reason) {
+        log.warn("[VNPay Sandbox] Giả lập thanh toán THẤT BẠI cho đơn hàng: [{}], lý do: [{}]", orderCode, reason);
+
+        Optional<Payment> existingOpt = paymentRepository.findByOrderCode(orderCode);
+
+        if (existingOpt.isPresent() && existingOpt.get().getStatus() == PaymentStatus.SUCCESS) {
+            log.warn("[VNPay Sandbox] Đơn hàng [{}] đã thanh toán thành công trước đó, không thể giả lập thất bại!", orderCode);
+            return PaymentCallbackResponse.builder()
+                    .responseCode("99")
+                    .message("Đơn hàng đã thanh toán thành công trước đó, không thể hủy!")
+                    .orderCode(orderCode)
+                    .success(false)
+                    .build();
+        }
+
+        Payment payment = existingOpt.orElseGet(() -> {
+            String code = "PAY-" + System.currentTimeMillis() + "-" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
+            return Payment.builder()
+                    .paymentCode(code)
+                    .orderCode(orderCode)
+                    .userId(1L)
+                    .amount(BigDecimal.valueOf(100000))
+                    .paymentMethod("VNPAY")
+                    .createdAt(LocalDateTime.now())
+                    .build();
+        });
+
+        payment.setStatus(PaymentStatus.FAILED);
+        paymentRepository.save(payment);
+
+        String failureReason = (reason != null && !reason.isBlank()) ? reason : "Khách hàng hủy thanh toán hoặc giao dịch bị lỗi (Sandbox simulated)";
+
+        // Lưu sự kiện thất bại vào bảng outbox_events để kích hoạt Saga Bù trừ
+        savePaymentFailedOutboxEvent(payment, failureReason);
+
+        // Giải phóng Redis lock (nếu có)
+        String redisKey = "idempotency:payment:" + orderCode;
+        paymentIdempotencyService.release(redisKey);
+
+        return PaymentCallbackResponse.builder()
+                .responseCode("24")
+                .message("Giả lập thanh toán VNPAY thất bại: " + failureReason)
+                .orderCode(orderCode)
+                .transactionNo(payment.getPaymentCode())
+                .bankCode("NCB")
+                .amount(payment.getAmount())
+                .success(false)
+                .build();
+    }
+
     /**
      * Ghi nhận sự kiện thanh toán thành công vào bảng outbox_events trong cùng DB Transaction.
      */
@@ -399,6 +458,43 @@ public class PaymentServiceImpl implements PaymentService {
                     payment.getOrderCode());
         } catch (JsonProcessingException e) {
             log.error("[Outbox] Lỗi serialize payload sự kiện cho đơn hàng [{}]: {}", payment.getOrderCode(), e.getMessage(), e);
+            throw new RuntimeException("Lỗi lưu sự kiện Outbox", e);
+        }
+    }
+
+    /**
+     * Ghi nhận sự kiện thanh toán thất bại vào bảng outbox_events trong cùng DB Transaction
+     * để kích hoạt chuỗi giao dịch bù trừ (Compensating Transaction) của Saga.
+     */
+    private void savePaymentFailedOutboxEvent(Payment payment, String failureReason) {
+        try {
+            PaymentFailedEvent event = PaymentFailedEvent.builder()
+                    .paymentCode(payment.getPaymentCode())
+                    .orderCode(payment.getOrderCode())
+                    .userId(payment.getUserId())
+                    .userEmail(payment.getUserEmail())
+                    .amount(payment.getAmount())
+                    .paymentMethod(payment.getPaymentMethod() != null ? payment.getPaymentMethod() : "VNPAY")
+                    .failureReason(failureReason)
+                    .failedAt(LocalDateTime.now())
+                    .build();
+
+            String payload = objectMapper.writeValueAsString(event);
+
+            OutboxEvent outboxEvent = OutboxEvent.builder()
+                    .aggregateType("PAYMENT")
+                    .aggregateId(payment.getOrderCode())
+                    .eventType("PaymentFailedEvent")
+                    .payload(payload)
+                    .topic(paymentFailedTopic)
+                    .status(OutboxStatus.PENDING)
+                    .build();
+
+            outboxRepository.save(outboxEvent);
+            log.info("[Outbox] Đã lưu sự kiện thanh toán THẤT BẠI cho đơn hàng: [{}] vào outbox_events (PENDING)",
+                    payment.getOrderCode());
+        } catch (JsonProcessingException e) {
+            log.error("[Outbox] Lỗi serialize payload sự kiện thất bại cho đơn hàng [{}]: {}", payment.getOrderCode(), e.getMessage(), e);
             throw new RuntimeException("Lỗi lưu sự kiện Outbox", e);
         }
     }
