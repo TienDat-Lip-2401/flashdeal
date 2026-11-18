@@ -2,7 +2,6 @@
 
 > **High-Concurrency Event-Driven E-Commerce & Flash Sale Backend Engine**  
 > *Được xây dựng với: Java 21, Spring Boot 3.4.1, Spring Cloud Gateway, Apache Kafka (KRaft), Redis 7 In-Memory, PostgreSQL 16 (4 Database Độc lập: auth_db, product_db, order_db, payment_db) và Docker.*  
-> *Hiệu năng thực tế: Phản hồi đơn hàng `< 5ms`, Chặn kho Redis RAM `< 1.5ms`, Gom dữ liệu đa luồng `12ms`, Chặn trùng lặp Idempotency `< 1.5ms`, Tự động bồi hoàn Saga `< 1s`.*
 
 ---
 
@@ -11,7 +10,7 @@
 2. [Chi Tiết 6 Microservices & 4 CSDL Độc Lập](#2-chi-tiết-6-microservices--4-csdl-độc-lập)
 3. [Bộ 6 Chốt Chặn Chịu Tải & An Toàn Dữ Liệu Doanh Nghiệp](#3-bộ-6-chốt-chặn-chịu-tải--an-toàn-dữ-liệu-doanh-nghiệp)
    - 3.1. [API Gateway Rate Limiting (Redis Token Bucket)](#31-api-gateway-rate-limiting-redis-token-bucket)
-   - 3.2. [API Composition Aggregator Đa Luồng (Java Concurrency 12ms)](#32-api-composition-aggregator-đa-luồng-java-concurrency-12ms)
+   - 3.2. [API Composition Aggregator Đa Luồng (Java Concurrency)](#32-api-composition-aggregator-đa-luồng-java-concurrency)
    - 3.3. [Kafka Dead Letter Topic (DLT) & Fault-Tolerance Retry](#33-kafka-dead-letter-topic-dlt--fault-tolerance-retry)
    - 3.4. [Cơ Chế Lũy Đẳng Chuẩn Doanh Nghiệp (Hybrid Idempotency Pattern)](#34-cơ-chế-lũy-đẳng-chuẩn-doanh-nghiệp-hybrid-idempotency-pattern)
    - 3.5. [Transactional Outbox Pattern (Zero Dual-Write & Chaos Resilience)](#35-transactional-outbox-pattern-zero-dual-write--chaos-resilience)
@@ -26,15 +25,15 @@
 # 1. TỔNG QUAN KIẾN TRÚC BACKEND
 
 Hệ thống được thiết kế theo mô hình **Event-Driven Architecture (EDA)** kết hợp nguyên tắc **Shared-Nothing / Database-per-Service**:
-- **Tải Đọc (Read-Heavy)**: Tối ưu qua **Redis RAM** (Cache danh mục, Tra cứu Autocomplete `< 2ms`, Bảng xếp hạng Hot Search, Rate Limiter).
-- **Tải Ghi (Write-Heavy & Concurrency)**: Xử lý bằng **Redis Lua Script nguyên tử** (Cổng chặn tồn kho `< 1.5ms`) và **Apache Kafka** (Phân làn sự kiện theo Partitions), giúp hệ thống phản hồi đặt hàng trong **`< 5ms`** mà không bao giờ bị âm kho hay nghẽn Database.
+- **Tải Đọc (Read-Heavy)**: Tối ưu qua **Redis RAM** (Cache danh mục, Bảng xếp hạng Hot Search, Rate Limiter).
+- **Tải Ghi (Write-Heavy & Concurrency)**: Xử lý bằng **Redis Lua Script nguyên tử** và **Apache Kafka** (Phân làn sự kiện theo Partitions), giúp hệ thống trả kết quả đặt hàng ngay mà không bao giờ bị âm kho hay nghẽn Database.
 
 ```mermaid
 graph TD
     Client["Client (Frontend / Mobile App)"] --> Gateway["API GATEWAY (:8080)<br/>Spring Cloud Gateway + Redis Token Bucket"]
 
     Gateway -->|"Route /auth/**"| AuthSvc["AUTH SERVICE (:8081)<br/>Stateless JWT & Redis Blacklist<br/>DB: auth_db"]
-    Gateway -->|"Route /products/**"| ProdSvc["PRODUCT SERVICE (:8082)<br/>BFF Parallel Aggregator (12ms)<br/>DB: product_db"]
+    Gateway -->|"Route /products/**"| ProdSvc["PRODUCT SERVICE (:8082)<br/>BFF Parallel Aggregator<br/>DB: product_db"]
     Gateway -->|"Route /flash-sales/**"| OrderSvc["FLASHSALE-ORDER SERVICE (:8083)<br/>Lua FastGate & Hybrid Idempotency<br/>DB: order_db"]
     Gateway -->|"Route /payments/**"| PaySvc["PAYMENT SERVICE (:8084)<br/>Transactional Outbox & VNPay / VietQR<br/>DB: payment_db"]
 
@@ -76,8 +75,8 @@ graph TD
 | :--- | :---: | :---: | :--- | :--- |
 | **`api-gateway`** | `8080` | *Không* | Spring Cloud Gateway, Redis | Điểm vào duy nhất, Routing động, Rate Limiter theo Route (Token Bucket), CORS tập trung, OpenAPI Swagger gom nhóm. |
 | **`auth-service`** | `8081` | `auth_db` | Spring Security, JJWT, Redis | Đăng ký, đăng nhập, cấp cặp JWT Token (Access 15p + Refresh 7d), Token Rotation, Logout qua Redis Blacklist. |
-| **`product-service`** | `8082` | `product_db` | JPA, Redis ZSET, Multithreading | Quản lý sản phẩm & danh mục. BFF Aggregator đa luồng gom dữ liệu trong **`12ms`**. Tra cứu Autocomplete `< 2ms`. |
-| **`flashsale-order-service`** | `8083` | `order_db` | Redis Lua, Spring AOP, Kafka | Chiến dịch Flash Sale, Fast-Gate trừ kho RAM `< 1.5ms`. **Idempotency Hybrid Pattern** chặn click spam `< 1.5ms`. Quản trị đơn hàng & Timeout Restock. **Saga Participant** hoàn kho. |
+| **`product-service`** | `8082` | `product_db` | JPA, Redis ZSET, Multithreading | Quản lý sản phẩm & danh mục. BFF Aggregator đa luồng gom dữ liệu song song. Tra cứu Autocomplete bằng Redis ZSET. |
+| **`flashsale-order-service`** | `8083` | `order_db` | Redis Lua, Spring AOP, Kafka | Chiến dịch Flash Sale, Fast-Gate trừ kho trên Redis. **Idempotency Hybrid Pattern** chặn click spam. Quản trị đơn hàng & Timeout Restock. **Saga Participant** hoàn kho. |
 | **`payment-service`** | `8084` | `payment_db` | VNPay SDK, VietQR, Transactional Outbox | Cổng VNPAY Sandbox, sinh mã VietQR động, **Transactional Outbox** chống Dual-Write, **Saga Initiator** khởi phát bù trừ. |
 | **`notification-service`** | `8086` | *Không* | Spring Kafka, Thymeleaf, JavaMail | Lắng nghe sự kiện từ Kafka để gửi Email xác nhận đăng ký và Email hóa đơn đơn hàng tự động. |
 
@@ -89,11 +88,10 @@ graph TD
 * Tích hợp bộ lọc phân luồng cấp Route trên Spring Cloud Gateway sử dụng thuật toán **Token Bucket** trong Redis RAM.
 * Tự động trả về mã chuẩn **`HTTP 429 Too Many Requests`** khi vượt ngưỡng cho phép.
 
-### 3.2. API Composition Aggregator Đa Luồng (Java Concurrency 12ms)
+### 3.2. API Composition Aggregator Đa Luồng (Java Concurrency)
 * Tại endpoint `GET /api/products/{id}/detail-summary` của `product-service`:
   - Gom đồng thời 4 nguồn dữ liệu: Thông tin sản phẩm, Flash Sale Stock, Danh mục cha, và Thống kê tồn kho.
   - Sử dụng `ThreadPoolTaskExecutor` (16 worker threads) kết hợp `CompletableFuture.allOf()`.
-  - **Hiệu năng đạt được**: Giảm thời gian phản hồi từ $60ms \rightarrow \mathbf{12ms}$.
 
 ### 3.3. Kafka Dead Letter Topic (DLT) & Fault-Tolerance Retry
 * Cấu hình chốt chặn lỗi tự động cho Kafka Consumers:
@@ -111,7 +109,7 @@ graph TD
      - *Ưu tiên 1*: Đọc `Idempotency-Key` từ Header do Client gửi lên.
      - *Dự phòng (Fallback)*: Tự động băm `MD5(userId + ":" + campaignId + ":" + productId)` nếu Client không truyền.
   3. **Chốt chặn Redis**:
-     - Khi nhận request: `SET key "PROCESSING" NX EX 30`. Nếu đã tồn tại $\rightarrow$ Trả ngay mã **`HTTP 409 Conflict` (code: 1090)** trong **`< 1.5ms`**.
+     - Khi nhận request: `SET key "PROCESSING" NX EX 30`. Nếu đã tồn tại $\rightarrow$ Trả ngay mã **`HTTP 409 Conflict` (code: 1090)**.
      - Khi thành công: Chuyển sang `SET key "COMPLETED" EX 120` để chống click liên tục trong 2 phút.
      - Khi gặp ngoại lệ: Xóa key (`DEL`) để khách có thể thử lại.
 
@@ -166,7 +164,7 @@ graph TD
 
 # 5. CƠ CHẾ CHỐNG ÂM KHO & QUẢN LÝ VÒNG ĐỜI ĐƠN HÀNG
 
-1. **Redis Lua Script Fast-Gate**: Đảm bảo nguyên tử 100%, trừ kho và ghi nhận quyền mua trong 1 lệnh duy nhất tại RAM (`< 1.5ms`), loại trừ Race Condition.
+1. **Redis Lua Script Fast-Gate**: Đảm bảo nguyên tử 100%, trừ kho và ghi nhận quyền mua trong 1 lệnh duy nhất tại RAM, loại trừ Race Condition.
 2. **Timeout Restock Scheduler**: Quét các đơn hàng `PENDING` quá **15 phút** mà chưa thanh toán để tự động chuyển sang `CANCELLED` và hoàn tồn kho DB + Redis.
 3. **Saga Compensating Restock**: Hoàn kho và hủy đơn ngay lập tức khi phát hiện thanh toán thất bại tại cổng VNPay.
 
@@ -204,13 +202,13 @@ curl -X POST http://localhost:8080/api/flash-sales/orders \
   -H "Idempotency-Key: test-uuid-1111" \
   -d '{"campaignId":5,"productId":8,"shippingAddress":"Hà Nội","phone":"0987654321"}'
 # -> Request 1: HTTP 202 Accepted
-# -> Request 2 (cùng key): HTTP 409 Conflict (Code: 1090) trong < 1.5ms từ Redis RAM
+# -> Request 2 (cùng key): HTTP 409 Conflict (Code: 1090) từ Redis
 ```
 
-### ⚡ Test 2: Kiểm Thử Gom Dữ Liệu Đa Luồng 12ms (Java Concurrency)
+### ⚡ Test 2: Kiểm Thử Gom Dữ Liệu Đa Luồng (Java Concurrency)
 ```bash
 curl -i http://localhost:8080/api/products/8/detail-summary
-# -> Trả về JSON tổng hợp trong 12ms - 13ms (nhanh gấp 5 lần tuần tự)
+# -> Trả về JSON tổng hợp từ 4 nguồn, được lấy song song
 ```
 
 ### ⚡ Test 3: Kiểm Thử Cách Ly Lỗi Kafka DLT (Poison Pill Isolation)
