@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /quan-tri
+Disallow: /tai-khoan
+Disallow: /tim-kiem
+Disallow: /dang-nhap
+Disallow: /dang-ky
+
+Sitemap: http://localhost:5173/sitemap.xml
