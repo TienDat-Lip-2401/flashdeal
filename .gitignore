@@ -1,0 +1,26 @@
+# Claude Code / AI assistant files (local only, never pushed)
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+**/CLAUDE.md
+**/CLAUDE.local.md
+.mcp.json
+
+# Other agent tool configs / skills
+.agents/
+.cursor/
+.cursorrules
+.codex/
+.gemini/
+GEMINI.md
+AGENTS.md
+skills/
+
+# Working folders created by skills / agent tools at runtime
+.taste-skill/
+**/.taste-skill/
+.playwright-cli/
+.playwright-mcp/
+.windsurf/
+.windsurfrules
+.aider*
