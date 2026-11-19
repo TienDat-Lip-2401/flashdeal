@@ -1,9 +1,10 @@
 package flashdeal_api.payment.controller;
 
+import flashdeal_api.payment.client.OrderClient;
+import flashdeal_api.payment.client.OrderClient.OrderInfo;
 import flashdeal_api.payment.dto.PaymentCallbackResponse;
 import flashdeal_api.payment.dto.VNPayCreatePaymentRequest;
 import flashdeal_api.payment.dto.VNPayPaymentResponse;
-import flashdeal_api.payment.entity.Payment;
 import flashdeal_api.payment.repository.PaymentRepository;
 import flashdeal_api.payment.service.PaymentService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -12,7 +13,9 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -26,13 +29,19 @@ public class PaymentController {
 
     private final PaymentService paymentService;
     private final PaymentRepository paymentRepository;
+    private final OrderClient orderClient;
 
     @PostMapping("/vnpay/create-payment-url")
-    @Operation(summary = "Tạo URL chuyển hướng sang Cổng thanh toán VNPAY Sandbox")
+    @Operation(summary = "Tạo URL chuyển hướng sang Cổng thanh toán VNPAY Sandbox (chỉ chủ đơn, số tiền lấy từ đơn hàng)")
     public ResponseEntity<VNPayPaymentResponse> createVNPayPaymentUrl(
             @Valid @RequestBody VNPayCreatePaymentRequest request,
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String authorization,
+            Authentication authentication,
             HttpServletRequest servletRequest) {
-        VNPayPaymentResponse response = paymentService.createVNPayPaymentUrl(request, servletRequest);
+        OrderInfo order = orderClient.getOrder(request.getOrderCode(), authorization)
+                .requirePayableBy((Long) authentication.getPrincipal());
+        VNPayPaymentResponse response = paymentService.createVNPayPaymentUrl(
+                request, order, callerEmail(authentication), servletRequest);
         return ResponseEntity.ok(response);
     }
 
@@ -44,29 +53,20 @@ public class PaymentController {
         return ResponseEntity.ok(response);
     }
 
-    @PostMapping("/vnpay/simulate-pay")
-    @Operation(summary = "Giả lập thanh toán VNPAY thành công (Dành cho Developer kiểm thử nhanh)")
-    public ResponseEntity<PaymentCallbackResponse> simulatePayment(
-            @RequestParam String orderCode,
-            @RequestParam(required = false) String email) {
-        PaymentCallbackResponse response = paymentService.simulateSuccessPayment(orderCode, email);
-        return ResponseEntity.ok(response);
-    }
-
-    @PostMapping("/vnpay/simulate-fail")
-    @Operation(summary = "Giả lập thanh toán VNPAY thất bại (Dành cho kiểm thử luồng bù trừ Saga)")
-    public ResponseEntity<PaymentCallbackResponse> simulateFailPayment(
-            @RequestParam String orderCode,
-            @RequestParam(required = false, defaultValue = "Khách hàng hủy thanh toán hoặc tài khoản không đủ số dư") String reason) {
-        PaymentCallbackResponse response = paymentService.simulateFailPayment(orderCode, reason);
-        return ResponseEntity.ok(response);
-    }
-
     @GetMapping("/order/{orderCode}")
-    @Operation(summary = "Tra cứu thông tin và trạng thái thanh toán theo mã đơn hàng")
-    public ResponseEntity<?> getPaymentByOrderCode(@PathVariable String orderCode) {
+    @Operation(summary = "Tra cứu thông tin và trạng thái thanh toán theo mã đơn hàng (chủ đơn hoặc admin)")
+    public ResponseEntity<?> getPaymentByOrderCode(
+            @PathVariable String orderCode,
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String authorization) {
+        // order-service chỉ trả đơn cho chủ đơn hoặc admin; người khác nhận 404
+        orderClient.getOrder(orderCode, authorization);
         return paymentRepository.findByOrderCode(orderCode)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
+    }
+
+    /** Email lưu trong details của token (do JwtAuthenticationFilter gắn vào). */
+    static String callerEmail(Authentication authentication) {
+        return authentication.getDetails() instanceof String email ? email : null;
     }
 }

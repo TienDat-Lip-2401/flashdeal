@@ -249,6 +249,10 @@ services:
       SPRING_DATA_REDIS_PORT: 6379
       VNP_TMN_CODE: 7CW0K93X
       VNP_HASH_SECRET: CGTQWUEKMFNKSAZNQWLLZNAAFKEYLREX
+      JWT_SECRET_KEY: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+      ORDER_SERVICE_URL: http://flashsale-order-service:8083
+      # Bat endpoint thanh toan gia lap cho moi truong demo. Tat (false) khi chay that.
+      PAYMENT_SIMULATE_ENABLED: "true"
     depends_on:
       flashdeal-db:
         condition: service_healthy

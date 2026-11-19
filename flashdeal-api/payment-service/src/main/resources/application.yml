@@ -56,6 +56,18 @@ vnpay:
   version: "2.1.0"
   command: "pay"
 
+jwt:
+  secret-key: ${JWT_SECRET_KEY:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+
+# Payment hoi order-service de biet don thuoc ve ai va tong tien that (khong tin so lieu client gui len)
+order-service:
+  url: ${ORDER_SERVICE_URL:http://localhost:8083}
+
+payment:
+  simulate:
+    # Endpoint thanh toan gia lap (simulate-pay / simulate-fail). Mac dinh tat; docker-compose bat cho demo.
+    enabled: ${PAYMENT_SIMULATE_ENABLED:false}
+
 logging:
   level:
     root: INFO

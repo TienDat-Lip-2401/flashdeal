@@ -12,11 +12,10 @@ public interface OrderService {
 
     List<OrderResponse> getUserOrders(Long userId);
 
-    OrderResponse getOrderByCode(String orderCode);
+    /** Chủ đơn hoặc admin mới xem được; người khác nhận ORDER_NOT_FOUND để không lộ đơn tồn tại. */
+    OrderResponse getOrderByCode(String orderCode, Long userId, boolean isAdmin);
 
     OrderResponse cancelOrder(String orderCode, Long userId);
-
-    OrderResponse payOrder(String orderCode, Long userId);
 
     int cancelExpiredOrders();
 

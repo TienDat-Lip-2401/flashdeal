@@ -16,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
@@ -59,10 +60,18 @@ public class OrderController {
     }
 
     @GetMapping("/{orderCode}")
-    @Operation(summary = "Tra cứu chi tiết đơn hàng theo mã (orderCode)")
+    @Operation(summary = "Tra cứu chi tiết đơn hàng theo mã (chỉ chủ đơn hoặc admin)")
     public ResponseEntity<ApiResponse<OrderResponse>> getOrderByCode(
-            @PathVariable String orderCode) {
-        OrderResponse order = orderService.getOrderByCode(orderCode);
+            @PathVariable String orderCode,
+            Authentication authentication) {
+
+        if (authentication == null || !(authentication.getPrincipal() instanceof Long userId)) {
+            throw new AppException(ErrorCode.UNAUTHORIZED);
+        }
+        boolean isAdmin = authentication.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
+
+        OrderResponse order = orderService.getOrderByCode(orderCode, userId, isAdmin);
         return ResponseEntity.ok(ApiResponse.success(order));
     }
 
@@ -78,20 +87,6 @@ public class OrderController {
 
         OrderResponse response = orderService.cancelOrder(orderCode, userId);
         return ResponseEntity.ok(ApiResponse.success("Hủy đơn hàng và hoàn kho thành công", response));
-    }
-
-    @PutMapping("/{orderCode}/pay")
-    @Operation(summary = "Thanh toán đơn hàng (Chuyển trạng thái sang PAID)")
-    public ResponseEntity<ApiResponse<OrderResponse>> payOrder(
-            @PathVariable String orderCode,
-            @AuthenticationPrincipal Object principal) {
-
-        if (!(principal instanceof Long userId)) {
-            throw new AppException(ErrorCode.UNAUTHORIZED);
-        }
-
-        OrderResponse response = orderService.payOrder(orderCode, userId);
-        return ResponseEntity.ok(ApiResponse.success("Thanh toán đơn hàng thành công!", response));
     }
 
     @PostMapping("/cancel-expired")

@@ -2,7 +2,10 @@ package flashdeal_api.order.exception;
 
 import flashdeal_api.order.model.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.FieldError;
@@ -68,6 +71,14 @@ public class GlobalExceptionHandler {
                 "Dữ liệu gửi lên không đúng định dạng: " + (ex.getRootCause() != null ? ex.getRootCause().getMessage() : ex.getMessage())
         );
         return ResponseEntity.status(ErrorCode.INVALID_REQUEST.getHttpStatus()).body(response);
+    }
+
+    // Đường dẫn hoặc method không tồn tại: trả 404/405 thay vì rơi xuống lỗi 500 bên dưới
+    @ExceptionHandler({NoResourceFoundException.class, HttpRequestMethodNotSupportedException.class})
+    public ResponseEntity<ApiResponse<Object>> handleRouteNotFound(Exception ex) {
+        HttpStatus status = ex instanceof HttpRequestMethodNotSupportedException
+                ? HttpStatus.METHOD_NOT_ALLOWED : HttpStatus.NOT_FOUND;
+        return ResponseEntity.status(status).body(ApiResponse.error(status.value(), "Không tìm thấy đường dẫn yêu cầu."));
     }
 
     @ExceptionHandler(Exception.class)

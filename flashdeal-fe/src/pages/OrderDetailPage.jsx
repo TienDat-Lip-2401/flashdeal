@@ -7,7 +7,6 @@ import { Seo } from '../lib/seo';
 import { useOrder, useProductIndex } from '../lib/queries';
 import { formatDateTime, formatPrice, parseDate } from '../lib/format';
 import { errorMessage } from '../lib/errors';
-import { useAuth } from '../store/auth';
 import { toast } from '../store/toast';
 import { Breadcrumbs } from '../components/ui/Breadcrumbs';
 import { Countdown } from '../components/ui/Countdown';
@@ -16,9 +15,11 @@ import { ProductImage } from '../components/ui/ProductImage';
 import { ErrorState } from '../components/ui/States';
 import { OrderTimeline, StatusBadge } from '../components/OrderStatus';
 
+// Nút thanh toán thử chỉ hiện khi máy chủ bật chế độ demo (PAYMENT_SIMULATE_ENABLED ở payment-service)
+const TEST_PAYMENT_ENABLED = import.meta.env.VITE_ENABLE_TEST_PAYMENT === 'true';
+
 export default function OrderDetailPage() {
   const { code } = useParams();
-  const user = useAuth((s) => s.user);
   const order = useOrder(code);
   const index = useProductIndex();
   const queryClient = useQueryClient();
@@ -45,11 +46,9 @@ export default function OrderDetailPage() {
 
   const payVnpay = () =>
     run('vnpay', async () => {
+      // Số tiền và người mua do máy chủ tự lấy từ đơn hàng, không gửi từ trình duyệt
       const res = await api.post('/payments/vnpay/create-payment-url', {
         orderCode: o.orderCode,
-        amount: o.totalAmount,
-        userId: user?.id,
-        email: user?.email,
         orderInfo: `Thanh toan don hang ${o.orderCode}`,
       });
       if (!res?.paymentUrl) throw { message: 'VNPay chưa trả về đường dẫn thanh toán.' };
@@ -57,7 +56,7 @@ export default function OrderDetailPage() {
     });
 
   const payTest = () =>
-    run('test', () => api.post('/payments/vnpay/simulate-pay', null, { params: { orderCode: o.orderCode, email: user?.email } }), 'Đã ghi nhận thanh toán thử. Trạng thái đơn sẽ cập nhật sau vài giây.');
+    run('test', () => api.post('/payments/vnpay/simulate-pay', null, { params: { orderCode: o.orderCode } }), 'Đã ghi nhận thanh toán thử. Trạng thái đơn sẽ cập nhật sau vài giây.');
 
   if (order.isLoading || (order.isFetching && !order.data)) {
     return (
@@ -168,9 +167,11 @@ export default function OrderDetailPage() {
                 <button type="button" className="btn btn-primary mt-5 w-full" onClick={payVnpay} disabled={Boolean(busy)}>
                   {busy === 'vnpay' && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />} Thanh toán qua VNPay
                 </button>
-                <button type="button" className="btn btn-ghost mt-3 w-full" onClick={payTest} disabled={Boolean(busy)}>
-                  {busy === 'test' && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />} Thanh toán thử (môi trường demo)
-                </button>
+                {TEST_PAYMENT_ENABLED && (
+                  <button type="button" className="btn btn-ghost mt-3 w-full" onClick={payTest} disabled={Boolean(busy)}>
+                    {busy === 'test' && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />} Thanh toán thử (môi trường demo)
+                  </button>
+                )}
                 <button type="button" className="mt-4 w-full text-center text-sm font-medium text-muted hover:text-sale" onClick={() => setConfirmCancel(true)} disabled={Boolean(busy)}>
                   Hủy đơn này
                 </button>

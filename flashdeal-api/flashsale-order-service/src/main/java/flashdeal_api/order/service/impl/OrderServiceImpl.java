@@ -150,8 +150,9 @@ public class OrderServiceImpl implements OrderService {
 
     @Override
     @Transactional(readOnly = true)
-    public OrderResponse getOrderByCode(String orderCode) {
+    public OrderResponse getOrderByCode(String orderCode, Long userId, boolean isAdmin) {
         Order order = orderRepository.findByOrderCode(orderCode)
+                .filter(o -> isAdmin || o.getUserId().equals(userId))
                 .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
         return mapToOrderResponse(order);
     }
@@ -181,41 +182,6 @@ public class OrderServiceImpl implements OrderService {
         });
 
         log.info("Cancelled order: {} for user: {} and restocked inventory", orderCode, userId);
-        return mapToOrderResponse(order);
-    }
-
-    @Override
-    @Transactional
-    public OrderResponse payOrder(String orderCode, Long userId) {
-        Order order = orderRepository.findByOrderCode(orderCode)
-                .orElseThrow(() -> new AppException(ErrorCode.ORDER_NOT_FOUND));
-
-        if (!order.getUserId().equals(userId)) {
-            throw new AppException(ErrorCode.FORBIDDEN);
-        }
-
-        if (order.getStatus() != OrderStatus.PENDING) {
-            throw new AppException(ErrorCode.ORDER_CANNOT_BE_CANCELLED);
-        }
-
-        // Kiem tra neu don da qua han
-        if (order.getExpiresAt() != null && LocalDateTime.now().isAfter(order.getExpiresAt())) {
-            order.setStatus(OrderStatus.CANCELLED);
-            orderRepository.save(order);
-
-            // Hoan kho vi don qua han
-            order.getItems().forEach(item -> {
-                preHeatService.restock(order.getCampaignId(), item.getProductId(), userId, item.getQuantity());
-                productRepository.findByCampaignIdAndProductId(order.getCampaignId(), item.getProductId())
-                        .ifPresent(p -> productRepository.restockDb(p.getId(), item.getQuantity()));
-            });
-
-            throw new AppException(ErrorCode.ORDER_CANNOT_BE_CANCELLED);
-        }
-
-        order.setStatus(OrderStatus.PAID);
-        orderRepository.save(order);
-        log.info("Successfully marked order {} as PAID for user {}", orderCode, userId);
         return mapToOrderResponse(order);
     }
 
