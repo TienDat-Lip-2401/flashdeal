@@ -25,18 +25,43 @@ Mức độ: 🔴 nghiêm trọng (bảo mật, mất tiền) · 🟠 sai dữ l
 - **Kiểm chứng:** `POST /api/flash-sales/campaigns` với body rỗng, không gửi token → trả lỗi **validate** (1002), tức request đã vào tới controller.
 - **Hướng sửa:** `POST/DELETE /flash-sales/campaigns/**` → `hasRole("ADMIN")`, và đổi `anyRequest()` thành `denyAll()` hoặc `authenticated()`.
 
-## 🔴 3. Ai cũng đánh dấu được đơn là đã thanh toán (`simulate-pay`)
+## 🔴 3. Ai cũng đánh dấu được đơn là đã thanh toán (`simulate-pay`) — ✅ Đã khắc phục (20/11/2026)
+
+> **Đã sửa:**
+> - **Payment-service có JWT:** thêm Spring Security và JWT, dùng chung secret với các service khác. `payment-callback` (bảo vệ bằng chữ ký HMAC của VNPay) và `health` vẫn công khai. Các endpoint `/payments/**` khác cần đăng nhập, phần còn lại `denyAll()`. Chưa đăng nhập thì trả 401 để FE tự làm mới token.
+> - **Không tin dữ liệu client:** `OrderClient` gọi `GET /flash-sales/orders/{code}` của order-service bằng chính token của người gọi. Order-service chỉ trả đơn cho chủ đơn hoặc admin, nên một lần gọi vừa kiểm tra quyền vừa lấy được tổng tiền thật. Chỉ chủ đơn mới thanh toán được, và chỉ khi đơn còn `PENDING`; người khác nhận 404, đơn không còn chờ thanh toán nhận 409.
+> - **Endpoint giả lập có thể tắt:** `simulate-pay` và `simulate-fail` được tách sang `PaymentSimulateController`, chỉ tồn tại khi `payment.simulate.enabled=true`. Mặc định tắt; `docker-compose.yml` bật cho demo qua `PAYMENT_SIMULATE_ENABLED`. FE chỉ hiện nút "Thanh toán thử" khi `VITE_ENABLE_TEST_PAYMENT=true`.
+> - **Bỏ `PUT /flash-sales/orders/{code}/pay`:** trạng thái `PAID` giờ chỉ đến từ `payment.successful.event`.
+>
+> **Kiểm chứng lại** (request thật qua gateway):
+> - Không token gọi `simulate-pay` → 401.
+> - Người lạ gọi `simulate-pay`, `simulate-fail`, `create-payment-url` → 404.
+> - Admin gọi `simulate-pay` cho đơn người khác → 404.
+> - `PUT .../pay` → 404.
+> - Chủ đơn gọi `simulate-pay` → 200, đơn chuyển `PAID`. Gọi lần 2 → 409.
+> - Tắt cờ thì `simulate-*` → 404.
+> - Playwright 24/24 pass.
 
 - **Nơi:** `payment-service`. Service này **không có Spring Security** (không có dependency `spring-boot-starter-security`). `POST /payments/vnpay/simulate-pay?orderCode=...` và `simulate-fail` mở cho mọi người.
 - **Hậu quả:** biết mã đơn là thanh toán được mà không trả tiền. Mã đơn lại nằm trong URL và email.
 - **Lỗ cùng loại (phát hiện 20/11/2026):** `PUT /flash-sales/orders/{code}/pay` (`OrderServiceImpl.payOrder`) chỉ kiểm tra đúng chủ đơn rồi đặt thẳng `PAID`, không đi qua payment-service. Khách đăng nhập có thể tự đánh dấu đơn của mình là đã thanh toán. FE không gọi endpoint này. Nên bỏ hẳn, hoặc chỉ bật ở dev như `simulate-*`; trạng thái `PAID` chỉ nên đến từ `payment.successful.event`.
+- **Lỗ cùng gốc: số tiền do client tự gửi (phát hiện và sửa 20/11/2026).** `create-payment-url` lấy `amount` và `userId` từ body, còn callback VNPay chỉ kiểm tra chữ ký mà không so số tiền. Khách có thể sửa `amount` thành 1.000đ, trả 1.000đ thật, và đơn 18 triệu vẫn thành `PAID`. **Đã sửa:** số tiền lấy từ order-service, request không còn trường `amount`/`userId`/`email`. Callback từ chối đơn chưa tạo yêu cầu thanh toán (mã `01`) và số tiền lệch với đơn (mã `04`). Kiểm chứng bằng callback có chữ ký hợp lệ nhưng sửa số tiền → `04`, đơn vẫn `PENDING`.
 - **Hướng sửa:** chỉ bật các endpoint `simulate-*` ở profile `dev` (`@Profile("dev")`, hoặc cờ `payment.simulate.enabled`), và thêm xác thực JWT cho payment-service. FE hiện vẫn hiện nút "Thanh toán thử (môi trường demo)"; khi tắt endpoint thì cần ẩn nút này.
 
-## 🔴 4. Xem được đơn hàng của người khác theo mã đơn (IDOR)
+## 🔴 4. Xem được đơn hàng của người khác theo mã đơn (IDOR) — ✅ Đã khắc phục (20/11/2026)
+
+> **Đã sửa:** `getOrderByCode(orderCode, userId, isAdmin)` chỉ trả đơn cho chủ đơn hoặc admin, người khác nhận `ORDER_NOT_FOUND` (404, không phải 403, để không lộ việc đơn có tồn tại). `GET /payments/order/{code}` cần đăng nhập và kiểm tra quyền qua order-service theo cùng quy tắc.
+> **Kiểm chứng lại:** người lạ gọi `GET /flash-sales/orders/{code}` hoặc `GET /payments/order/{code}` → 404. Không token → 401. Chủ đơn và admin → 200.
 
 - **Nơi:** `OrderServiceImpl.getOrderByCode(orderCode)` không kiểm tra `order.userId == userId`. `GET /payments/order/{orderCode}` cũng không cần đăng nhập.
 - **Hậu quả:** người đăng nhập bất kỳ (hoặc người lạ, với API payment) đọc được địa chỉ, số điện thoại và số tiền của đơn khác.
 - **Hướng sửa:** truyền `userId` vào service; trả 404 nếu không phải chủ đơn (trừ admin).
+
+## 🟡 4b. Cấu hình cần đóng lại khi deploy (ghi nhận 20/11/2026, chưa sửa)
+
+- Payment-service (8084) và các service khác mở cổng thẳng ra host, gọi được mà không qua giới hạn tốc độ của gateway. Khi deploy chỉ nên mở cổng gateway.
+- Kafka UI (8085) không có đăng nhập, xem được mọi message, kể cả mã đơn. Không nên mở ra ngoài.
+- Đường dẫn không tồn tại ở order-service từng trả 500 (do handler bắt `Exception` chung). Đã sửa thành 404/405.
 
 ## 🟠 5. Gợi ý tìm kiếm không cập nhật khi đổi tên hoặc xóa sản phẩm
 

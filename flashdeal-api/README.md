@@ -220,8 +220,12 @@ Gửi message hỏng vào Kafka $\rightarrow$ `DefaultErrorHandler` retry 3 lầ
 3. Khởi động lại Kafka: `docker start flashdeal-kafka` $\rightarrow$ `OutboxScheduler` tự động quét lại và gửi sang Kafka $\rightarrow$ chuyển `PUBLISHED` $\rightarrow$ đơn hàng thành `PAID`!
 
 ### ⚡ Test 5: Kiểm Thử Choreography Saga (Bồi Hoàn Phân Tán Tự Động)
+Endpoint giả lập chỉ có khi `PAYMENT_SIMULATE_ENABLED=true` (docker-compose bật sẵn cho demo), cần token đăng nhập, và chỉ dùng được cho đơn `PENDING` của chính người gọi.
 ```bash
-curl -X POST "http://localhost:8084/payments/vnpay/simulate-fail?orderCode=ORD-SAGA-TEST-01&reason=USER_CANCELLED"
+TOKEN=$(curl -s -X POST http://localhost:8080/api/auth/login -H 'Content-Type: application/json' \
+  -d '{"email":"customer@flashdeal.vn","password":"Password@123"}' | jq -r .data.accessToken)
+curl -X POST "http://localhost:8080/api/payments/vnpay/simulate-fail?orderCode=<mã đơn PENDING của bạn>&reason=USER_CANCELLED" \
+  -H "Authorization: Bearer $TOKEN"
 # -> payment_db.outbox_events: Chuyển sang PUBLISHED
 # -> Kafka: Bắn topic payment.failed.event
 # -> order_db: Đơn hàng tự động đổi sang CANCELLED
