@@ -1,19 +1,25 @@
 # Lỗi backend phát hiện khi làm lại FE (18/11/2026)
 
-Các lỗi dưới đây được phát hiện khi chạy toàn bộ hệ thống bằng Docker và chạy test Playwright. **Code backend chưa được sửa**; mỗi mục có cách kiểm chứng và hướng sửa đề xuất để bạn chọn.
+Các lỗi dưới đây được phát hiện khi chạy toàn bộ hệ thống bằng Docker và chạy test Playwright. Mỗi mục có cách kiểm chứng và hướng sửa đề xuất. Mục nào đã sửa thì có ghi **✅ Đã khắc phục**, các mục còn lại chưa sửa.
 
 Mức độ: 🔴 nghiêm trọng (bảo mật, mất tiền) · 🟠 sai dữ liệu · 🟡 nhỏ hoặc tài liệu.
 
 ---
 
-## 🔴 1. Khách thường gọi được API quản trị đơn hàng
+## 🔴 1. Khách thường gọi được API quản trị đơn hàng — ✅ Đã khắc phục (20/11/2026)
+
+> **Đã sửa:** trong `SecurityConfig`, `/flash-sales/orders/admin/**` và `POST /flash-sales/orders/cancel-expired` yêu cầu `hasRole("ADMIN")`, đặt trước rule `authenticated()`. Thêm `@PreAuthorize("hasRole('ADMIN')")` trên 3 endpoint này trong `OrderController`, làm lớp chặn thứ hai.
+> **Kiểm chứng lại:** tài khoản khách gọi `GET /admin/all`, `PUT /admin/{code}/status`, `POST /cancel-expired` → **403**. Tài khoản admin gọi `GET /admin/all` → 200. `GET /my-orders` của khách vẫn 200. Playwright 24/24 pass.
 
 - **Nơi:** `flashsale-order-service` › `SecurityConfig`. `/flash-sales/orders/**` chỉ yêu cầu `authenticated()`, không kiểm tra `ROLE_ADMIN`.
 - **Kiểm chứng:** đăng nhập `customer@flashdeal.vn`, gọi `GET /api/flash-sales/orders/admin/all` → **200**, trả về đơn của mọi người (địa chỉ, số điện thoại). `PUT /admin/{code}/status` cũng vượt qua lớp bảo mật (đơn không tồn tại trả 404 thay vì 403).
 - **Hậu quả:** lộ thông tin khách; khách tự chuyển đơn của mình sang `SHIPPING` hoặc `DELIVERED` mà không thanh toán.
 - **Hướng sửa:** thêm `.requestMatchers("/flash-sales/orders/admin/**").hasRole("ADMIN")` trước rule `authenticated()`. Nên thêm cả `@PreAuthorize`.
 
-## 🔴 2. Ai cũng tạo hoặc xóa được chiến dịch flash sale, không cần đăng nhập
+## 🔴 2. Ai cũng tạo hoặc xóa được chiến dịch flash sale, không cần đăng nhập — ✅ Đã khắc phục (20/11/2026)
+
+> **Đã sửa:** `GET /flash-sales/campaigns/**` vẫn công khai. Mọi method khác trên `/flash-sales/campaigns/**` (tạo, xóa, thêm sản phẩm) yêu cầu `hasRole("ADMIN")`, có thêm `@PreAuthorize` trong `FlashSaleCampaignController`. Cuối file đổi `anyRequest().permitAll()` thành `denyAll()` (mặc định chặn), và mở riêng `/error` để lỗi 404/500 không bị đổi thành 403.
+> **Kiểm chứng lại:** không gửi token, gọi `POST /campaigns`, `POST /campaigns/{id}/products`, `DELETE /campaigns/{id}` → **403**. Tài khoản khách → 403. Tài khoản admin vẫn tạo được (body rỗng → 400 validate). `npm run seed` vẫn chạy được.
 
 - **Nơi:** `flashsale-order-service` › `SecurityConfig`. Chỉ khai báo `GET /flash-sales/campaigns/**` là `permitAll`, nhưng cuối file có `.anyRequest().permitAll()`, nên `POST` và `DELETE` cũng mở.
 - **Kiểm chứng:** `POST /api/flash-sales/campaigns` với body rỗng, không gửi token → trả lỗi **validate** (1002), tức request đã vào tới controller.
@@ -23,6 +29,7 @@ Mức độ: 🔴 nghiêm trọng (bảo mật, mất tiền) · 🟠 sai dữ l
 
 - **Nơi:** `payment-service`. Service này **không có Spring Security** (không có dependency `spring-boot-starter-security`). `POST /payments/vnpay/simulate-pay?orderCode=...` và `simulate-fail` mở cho mọi người.
 - **Hậu quả:** biết mã đơn là thanh toán được mà không trả tiền. Mã đơn lại nằm trong URL và email.
+- **Lỗ cùng loại (phát hiện 20/11/2026):** `PUT /flash-sales/orders/{code}/pay` (`OrderServiceImpl.payOrder`) chỉ kiểm tra đúng chủ đơn rồi đặt thẳng `PAID`, không đi qua payment-service. Khách đăng nhập có thể tự đánh dấu đơn của mình là đã thanh toán. FE không gọi endpoint này. Nên bỏ hẳn, hoặc chỉ bật ở dev như `simulate-*`; trạng thái `PAID` chỉ nên đến từ `payment.successful.event`.
 - **Hướng sửa:** chỉ bật các endpoint `simulate-*` ở profile `dev` (`@Profile("dev")`, hoặc cờ `payment.simulate.enabled`), và thêm xác thực JWT cho payment-service. FE hiện vẫn hiện nút "Thanh toán thử (môi trường demo)"; khi tắt endpoint thì cần ẩn nút này.
 
 ## 🔴 4. Xem được đơn hàng của người khác theo mã đơn (IDOR)

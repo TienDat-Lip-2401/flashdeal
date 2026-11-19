@@ -15,6 +15,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
@@ -94,6 +95,7 @@ public class OrderController {
     }
 
     @PostMapping("/cancel-expired")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Kích hoạt thủ công Động cơ quét & hủy đơn quá hạn 15 phút (Admin/Cron)")
     public ResponseEntity<ApiResponse<Integer>> cancelExpiredOrders() {
         int count = orderService.cancelExpiredOrders();
@@ -101,6 +103,7 @@ public class OrderController {
     }
 
     @GetMapping("/admin/all")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Lấy toàn bộ đơn hàng trong hệ thống (Dành cho Quản Trị Viên)")
     public ResponseEntity<ApiResponse<List<OrderResponse>>> getAllOrdersForAdmin(
             @RequestParam(value = "status", required = false) OrderStatus status) {
@@ -109,6 +112,7 @@ public class OrderController {
     }
 
     @PutMapping("/admin/{orderCode}/status")
+    @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Admin cập nhật trạng thái đơn hàng (PAID -> SHIPPING -> DELIVERED hoặc CANCELLED)")
     public ResponseEntity<ApiResponse<OrderResponse>> updateOrderStatusByAdmin(
             @PathVariable String orderCode,

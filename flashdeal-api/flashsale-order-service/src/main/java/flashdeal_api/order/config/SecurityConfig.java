@@ -36,17 +36,27 @@ public class SecurityConfig {
                                 "/actuator/**"
                         ).permitAll()
 
+                        // Trang loi noi bo cua Spring Boot: de loi tra ve dung ma (404, 500) thay vi 403
+                        .requestMatchers("/error").permitAll()
+
                         // Public: xem chien dich Flash Sale & san pham dang mo ban
-                        .requestMatchers(HttpMethod.GET, "/flash-sales/campaigns/**").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/flash-sales/campaigns").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/flash-sales/campaigns", "/flash-sales/campaigns/**").permitAll()
+
+                        // Admin: tao/xoa chien dich, them san pham vao chien dich
+                        .requestMatchers("/flash-sales/campaigns", "/flash-sales/campaigns/**").hasRole("ADMIN")
+
+                        // Admin: quan tri don hang. Phai dat TRUOC rule authenticated() ben duoi,
+                        // vi Spring dung o rule khop dau tien
+                        .requestMatchers("/flash-sales/orders/admin/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/flash-sales/orders/cancel-expired").hasRole("ADMIN")
 
                         // Authenticated: San Deal & xem don hang ca nhan
                         .requestMatchers(HttpMethod.POST, "/flash-sales/orders/**").authenticated()
                         .requestMatchers(HttpMethod.GET, "/flash-sales/orders/**").authenticated()
                         .requestMatchers(HttpMethod.PUT, "/flash-sales/orders/**").authenticated()
 
-                        // Any other request
-                        .anyRequest().permitAll()
+                        // Mac dinh chan: endpoint moi phai duoc khai bao ro rang o tren
+                        .anyRequest().denyAll()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
