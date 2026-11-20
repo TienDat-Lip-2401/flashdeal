@@ -177,8 +177,10 @@ graph TD
 # Di chuyển vào thư mục flashdeal-api
 cd d:\spring\flashdeal\flashdeal-api
 
-# 0. Tạo file cấu hình email (không commit). Điền Gmail App Password nếu muốn gửi email
-cp .env.example .env
+# 0. (Tùy chọn) Gửi email: tạo file .env (không commit) với 2 dòng
+#    MAIL_USERNAME=your-account@gmail.com
+#    MAIL_PASSWORD=<Gmail App Password>
+#    Bỏ qua bước này hệ thống vẫn chạy, chỉ không gửi email.
 
 # 1. Đóng gói mã nguồn toàn bộ 6 microservices
 ./mvnw.cmd clean package -DskipTests

@@ -94,7 +94,8 @@ Cần cài: **Docker Desktop**, **Node.js 18+**, **JDK 21**.
 
 ```bash
 cd flashdeal-api
-cp .env.example .env                 # điền Gmail App Password nếu muốn gửi email (bỏ trống vẫn chạy được)
+# (tùy chọn) gửi email: tạo file .env chứa MAIL_USERNAME=... và MAIL_PASSWORD=<Gmail App Password>
+
 ./mvnw clean package -DskipTests     # Windows: ./mvnw.cmd
 docker compose up -d --build
 ```
