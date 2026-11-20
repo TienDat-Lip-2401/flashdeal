@@ -219,8 +219,9 @@ services:
     environment:
       TZ: Asia/Ho_Chi_Minh
       SPRING_KAFKA_BOOTSTRAP_SERVERS: flashdeal-kafka:29092
-      SPRING_MAIL_USERNAME: datnguyentien2401@gmail.com
-      SPRING_MAIL_PASSWORD: mtyibtjpvfsewxch
+      # Doc tu flashdeal-api/.env (khong commit), xem .env.example
+      SPRING_MAIL_USERNAME: ${MAIL_USERNAME:-}
+      SPRING_MAIL_PASSWORD: ${MAIL_PASSWORD:-}
     depends_on:
       flashdeal-kafka:
         condition: service_healthy

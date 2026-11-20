@@ -25,8 +25,9 @@ spring:
   mail:
     host: ${SPRING_MAIL_HOST:smtp.gmail.com}
     port: ${SPRING_MAIL_PORT:587}
-    username: ${SPRING_MAIL_USERNAME:datnguyentien2401@gmail.com}
-    password: ${SPRING_MAIL_PASSWORD:mtyibtjpvfsewxch}
+    # Lay tu bien moi truong (file .env khong commit). De trong thi service van chay, chi khong gui duoc mail
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
     properties:
       mail:
         smtp:
